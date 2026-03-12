@@ -153,44 +153,13 @@ Content Script (content.js)           Background Worker (background.js)
 │    (infinite scroll)     │          │                          │
 └──────────────────────────┘          └──────────────────────────┘
                                                 │
-                                      ┌─────────▼──────────┐
+                                      ┌─────────▼───────────┐
                                       │ chrome.storage.local│
                                       │ (last 50 entries)   │
-                                      └────────────────────┘
+                                      └─────────────────────┘
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full component reference and data flow.
-
----
-
-## 🎛️ Configuration
-
-All configurable values are at the top of `content.js` with clear comments:
-
-### Selectors (Update if Reddit changes UI)
-
-```javascript
-const SELECTORS = {
-  shredditPost: 'shreddit-post',              // New Reddit custom element
-  postContainer: '[data-testid="post-container"]', // Fallback
-  oldRedditThing: '.thing.link',              // Old Reddit
-  shareButton: 'button[aria-label="Share"]',  // Inject after this
-  oldRedditToolbar: '.flat-list.buttons',     // Old Reddit toolbar
-  permalinkAttr: 'permalink',                 // <shreddit-post permalink="...">
-};
-```
-
-### Options
-
-```javascript
-const CONFIG = {
-  buttonLabel: 'JSON',          // Button text (change to "{}" etc.)
-  toastDuration: 2000,          // Toast display time (ms)
-  observerDebounce: 150,        // MutationObserver debounce (ms)
-  redditOrange: '#FF4500',      // Reddit brand color
-  markerAttribute: 'data-reddjson-added'  // Prevents duplicate buttons
-};
-```
 
 ---
 
@@ -213,98 +182,6 @@ const CONFIG = {
 | Private subreddit | Extension shows error toast (expected behavior) |
 | Rate limited | Wait a moment and try again |
 | Very large JSON | May take longer — button shows spinner |
-
-### Popup issues?
-| Issue | Solution |
-|-------|----------|
-| Empty history | Copy at least one post first |
-| Search not working | Check for typos; searches title, subreddit, postId |
-| Export fails | Ensure popup has permission to download |
-
----
-
-## 🧪 Test Plan
-
-Use this checklist to verify the extension works correctly:
-
-### Core Functionality
-- [ ] **T01 — Fresh Load**: Navigate to `reddit.com` → JSON buttons appear on 5+ posts
-- [ ] **T02 — Infinite Scroll**: Scroll down → new posts automatically get buttons
-- [ ] **T03 — Basic Copy**: Click JSON button → toast appears → clipboard has valid JSON
-- [ ] **T04 — Toast Behavior**: Toast appears near button, auto-dismisses after ~2s
-
-### Popup
-- [ ] **T05 — History Load**: Open popup → entries appear with correct title/sub/time
-- [ ] **T06 — Copy Again**: Click "Copy JSON" → clipboard updated, success toast shown
-- [ ] **T07 — View JSON**: Click "View" → modal opens with formatted JSON + copy button
-- [ ] **T08 — Delete Entry**: Click delete → confirmation → entry removed
-- [ ] **T09 — Export**: Click export → `.json` file downloads with all history
-
-### Cross-Platform
-- [ ] **T10 — Old Reddit**: Navigate to `old.reddit.com` → buttons appear and work
-- [ ] **T11 — Single Post Page**: Open any post page → button appears
-- [ ] **T12 — NSFW Post**: Button appears and copies JSON (if enabled in settings)
-- [ ] **T13 — Media Posts**: Test with image, video, and gallery posts
-
-### Error Handling
-- [ ] **T14 — Offline**: Disable network → click button → error toast appears
-- [ ] **T15 — Private Sub**: Navigate to private sub → graceful error
-- [ ] **T16 — Rate Limit**: Rapid clicks → rate limit message (or normal operation)
-
-### Performance
-- [ ] **T17 — Large Feed**: Load 100+ posts → no lag or stuttering
-- [ ] **T18 — Memory**: Check DevTools → no memory leaks over time
-- [ ] **T19 — Multiple Tabs**: Open Reddit in 3+ tabs → all work independently
-
-### Edge Cases
-- [ ] **T20 — Duplicate Prevention**: Scroll up/down → no duplicate buttons
-- [ ] **T21 — SPA Navigation**: Click post → go back → buttons still work
-- [ ] **T22 — Long Thread**: Copy post with 1000+ comments → handles gracefully
-- [ ] **T23 — Cross-Posted Post**: Button works on cross-posted content
-
----
-
-## 📁 Project Structure
-
-```
-ReddJSON/
-├── manifest.json           # Chrome extension manifest (V3)
-├── background.js           # Service worker — fetch + storage helper
-├── content.js              # Content script — injection + observer + toasts
-├── content.css             # Content script styles
-├── popup.html              # Popup HTML structure
-├── popup.js                # Popup logic — history, search, modals
-├── popup.css               # Popup styles — premium dark/light design
-├── reddjosn.svg            # Main SVG icon (Reddit Snoo + JSON document)
-├── icons/
-│   ├── icon-16.png         # 16×16 icon (toolbar)
-│   ├── icon-48.png         # 48×48 icon (extensions page)
-│   ├── icon-128.png        # 128×128 icon (Chrome Web Store)
-│   ├── reddjosn.svg        # SVG source copy
-│   ├── icon-generator.html # Browser-based PNG generator tool
-│   └── generate-icons.js   # Node.js icon generation script
-├── docs/
-│   └── ARCHitecture.md     # Architecture documentation
-├── TEST/
-│   └── test-plan.md        # Extended test checklist
-├── ARCHITECTURE.md         # Architecture overview (this repo root)
-└── README.md               # This file
-```
-
----
-
-## 🔮 Future Ideas
-
-- [ ] **Options page** — Customize button label, toast duration, history limit
-- [ ] **Dark mode** — Detect system preference for popup
-- [ ] **Keyboard shortcuts** — `Alt+J` to copy JSON on focused post
-- [ ] **Context menu** — Right-click → "Copy Post JSON"
-- [ ] **Export formats** — CSV, YAML, XML
-- [ ] **JSON path filter** — Copy only `data.children[0].data` (post only, no comments)
-- [ ] **Syntax highlighting** — Color-coded JSON viewer in popup
-- [ ] **Notification badge** — Show unread copy count on icon
-- [ ] **Firefox support** — Adapt manifest for Firefox Add-ons
-- [ ] **History sync** — `chrome.storage.sync` for cross-device history
 
 ---
 

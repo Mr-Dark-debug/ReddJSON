@@ -5,10 +5,16 @@
   "description": "Copy Reddit post JSON, generate LinkedIn posts with AI. Sidebar with history, AI posts, and provider settings.",
   "author": "ReddJSON Team",
   "icons": {
-    "128": "reddjosn.svg"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "action": {
-    "default_icon": "reddjosn.svg",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
     "default_title": "ReddJSON — Open Sidebar"
   },
   "permissions": [
