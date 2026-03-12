@@ -1,7 +1,7 @@
 /**
  * ReddJSON Content Script
  * ═══════════════════════════════════════════════════════════════════
- * Injects "JSON" copy buttons into Reddit post toolbars and handles
+ * Injects "JSON" copy buttons into Reddit post ACTION BARS and handles
  * all user interactions on the page (click → fetch → copy → toast).
  *
  * Supports:
@@ -13,28 +13,36 @@
  *
  * @fileoverview Content script for injection + observation + messaging
  * @author ReddJSON Team
- * @version 1.0.0
+ * @version 1.1.0
  */
+
+// ============================================================================
+// ICON SVG (reddjosn.svg inline — the official ReddJSON mascot)
+// ============================================================================
+const REDDJSON_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="18" height="18">
+  <g transform="translate(0, 5)">
+    <path d="M 100 60 L 100 20 L 130 20" stroke="currentColor" stroke-width="5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="38" cy="75" r="14" fill="white" stroke="currentColor" stroke-width="5"/>
+    <circle cx="162" cy="75" r="14" fill="white" stroke="currentColor" stroke-width="5"/>
+    <ellipse cx="100" cy="145" rx="40" ry="35" fill="white" stroke="currentColor" stroke-width="5"/>
+    <ellipse cx="100" cy="85" rx="55" ry="40" fill="white" stroke="currentColor" stroke-width="5"/>
+    <circle cx="80" cy="85" r="9" fill="#FF4500"/>
+    <circle cx="120" cy="85" r="9" fill="#FF4500"/>
+    <path d="M 80 105 Q 100 120 120 105" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <circle cx="130" cy="20" r="8" fill="white" stroke="currentColor" stroke-width="5"/>
+    <rect x="70" y="125" width="60" height="65" rx="4" fill="#F6F6F6" stroke="currentColor" stroke-width="4"/>
+    <path d="M 70 140 L 130 140" stroke="currentColor" stroke-width="2"/>
+    <text x="100" y="137" font-family="sans-serif" font-size="8" font-weight="bold" fill="currentColor" text-anchor="middle">.JSON</text>
+    <text x="100" y="175" font-family="monospace" font-size="32" font-weight="bold" fill="#FF4500" text-anchor="middle">{}</text>
+    <ellipse cx="65" cy="150" rx="9" ry="18" fill="white" stroke="currentColor" stroke-width="5" transform="rotate(-40 65 150)"/>
+    <ellipse cx="135" cy="150" rx="9" ry="18" fill="white" stroke="currentColor" stroke-width="5" transform="rotate(40 135 150)"/>
+  </g>
+</svg>`;
 
 // ============================================================================
 // SELECTORS — UPDATE IF REDDIT CHANGES UI
 // ============================================================================
-// These are the CSS selectors used to find Reddit posts and their toolbars.
-// If Reddit redesigns their DOM structure, update ONLY these values.
-// Everything else should work automatically.
 
-/**
- * @typedef {Object} Selectors
- * @property {string} shredditPost       - New Reddit custom element
- * @property {string} postContainer      - Fallback container selector
- * @property {string} oldRedditThing     - Old Reddit post selector
- * @property {string} shareButton        - Share button selector (inject after this)
- * @property {string} oldRedditToolbar   - Old Reddit toolbar
- * @property {string} permalinkAttr      - Attribute name for permalink on <shreddit-post>
- * @property {string} dataPermalink      - Fallback permalink attribute
- * @property {string} dataFullname       - Reddit fullname attribute (t3_xxxxx)
- * @property {string[]} feedContainers   - Selectors for feed containers (MutationObserver targets)
- */
 const SELECTORS = {
   // ── New Reddit (shreddit-post custom element) — PRIMARY ──
   shredditPost: 'shreddit-post',
@@ -42,16 +50,17 @@ const SELECTORS = {
   // ── New Reddit post container fallback ──
   postContainer: '[data-testid="post-container"]',
 
-  // ── Old Reddit post container (class "thing" with link type) ──
+  // ── Old Reddit post container ──
   oldRedditThing: '.thing.link',
 
-  // ── Toolbar / action bar selectors for button injection ──
-  shareButton: [
-    'button[aria-label="Share"]',
-    'button[data-click-id="share"]',
-    'faceplate-tracker[source="share"]',
+  // ── Share button selectors to find the bottom action bar ──  
+  // The JSON button goes NEXT TO the Share button in the action bar
+  shareButtonSelectors: [
     'shreddit-post-share-button',
-  ].join(', '),
+    'button[aria-label="Share"]',
+    'faceplate-tracker[source="share"]',
+    'button[data-click-id="share"]',
+  ],
 
   // ── Old Reddit toolbar ──
   oldRedditToolbar: '.flat-list.buttons',
@@ -77,25 +86,12 @@ const SELECTORS = {
 // ============================================================================
 
 const CONFIG = {
-  /** Button label text (change to "{}" or "Copy JSON" if preferred) */
   buttonLabel: 'JSON',
-
-  /** Toast display duration in milliseconds */
   toastDuration: 2000,
-
-  /** Debounce delay for MutationObserver in milliseconds */
   observerDebounce: 150,
-
-  /** Reddit brand orange */
   redditOrange: '#FF4500',
-
-  /** Success color */
   successGreen: '#46D160',
-
-  /** Error color */
   errorRed: '#FF585B',
-
-  /** Marker attribute to prevent duplicate button injection */
   markerAttribute: 'data-reddjson-added'
 };
 
@@ -103,19 +99,12 @@ const CONFIG = {
 // STATE
 // ============================================================================
 
-/** Prevents re-entrant calls to processAllPosts */
 let isProcessing = false;
 
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
-/**
- * Debounces a function — only the last call within `wait` ms actually fires.
- * @param {Function} func
- * @param {number} wait - Milliseconds
- * @returns {Function}
- */
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -124,11 +113,6 @@ function debounce(func, wait) {
   };
 }
 
-/**
- * Escapes HTML entities to prevent XSS in toast messages.
- * @param {string} str
- * @returns {string}
- */
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
@@ -139,16 +123,7 @@ function escapeHtml(str) {
 // TOAST NOTIFICATIONS
 // ============================================================================
 
-/**
- * Shows a floating toast notification near the clicked button.
- * Auto-dismisses after CONFIG.toastDuration ms.
- *
- * @param {string} message - Message to display
- * @param {'success'|'error'|'info'} type - Toast type
- * @param {HTMLElement} [nearElement] - Position toast relative to this element
- */
 function showToast(message, type = 'info', nearElement = null) {
-  // Remove existing toasts
   document.querySelectorAll('.reddjson-toast').forEach(t => t.remove());
 
   const toast = document.createElement('div');
@@ -163,7 +138,6 @@ function showToast(message, type = 'info', nearElement = null) {
   };
   const c = colors[type] || colors.info;
 
-  // ── Icons ──
   const icons = {
     success: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>',
     error: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
@@ -195,7 +169,6 @@ function showToast(message, type = 'info', nearElement = null) {
 
   toast.innerHTML = `${icons[type] || ''}<span>${escapeHtml(message)}</span>`;
 
-  // Position near the clicked button (or center top)
   if (nearElement) {
     const rect = nearElement.getBoundingClientRect();
     toast.style.top = `${Math.max(8, rect.top - 45)}px`;
@@ -209,7 +182,6 @@ function showToast(message, type = 'info', nearElement = null) {
 
   document.body.appendChild(toast);
 
-  // Animate in
   requestAnimationFrame(() => {
     toast.style.opacity = '1';
     toast.style.transform = nearElement
@@ -217,7 +189,6 @@ function showToast(message, type = 'info', nearElement = null) {
       : 'translateX(-50%) translateY(0)';
   });
 
-  // Animate out
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = nearElement
@@ -232,9 +203,8 @@ function showToast(message, type = 'info', nearElement = null) {
 // ============================================================================
 
 /**
- * Creates the styled JSON copy button element.
- * Matches Reddit's native button styling (pill shape, muted gray, hover orange).
- * @returns {HTMLButtonElement}
+ * Creates the styled JSON copy button with the official ReddJSON SVG icon.
+ * Styled to match Reddit's native action bar buttons.
  */
 function createJsonButton() {
   const button = document.createElement('button');
@@ -243,47 +213,43 @@ function createJsonButton() {
   button.setAttribute('aria-label', 'Copy post JSON to clipboard');
   button.title = 'Copy post JSON to clipboard';
 
+  // Style to match Reddit's native action bar buttons
   button.style.cssText = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 8px 12px;
-    margin: 0 4px;
+    padding: 0 8px;
+    height: 32px;
     border: none;
     border-radius: 20px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.5px;
     line-height: 1;
-    text-transform: uppercase;
     cursor: pointer;
     background: transparent;
-    color: #878A8C;
+    color: var(--color-tone-2, #878A8C);
     transition: background 0.15s, color 0.15s, transform 0.1s;
     user-select: none;
     -webkit-user-select: none;
     outline: none;
     vertical-align: middle;
+    position: relative;
+    flex-shrink: 0;
   `;
 
-  // ── JSON curly-braces icon ──
-  const icon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/>
-    <path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>
-  </svg>`;
+  // Use the official ReddJSON SVG icon
+  button.innerHTML = `${REDDJSON_SVG_ICON}<span>${CONFIG.buttonLabel}</span>`;
 
-  button.innerHTML = `${icon}<span>${CONFIG.buttonLabel}</span>`;
-
-  // ── Hover effects ──
+  // Hover effects matching Reddit's native style
   button.addEventListener('mouseenter', () => {
     button.style.background = 'rgba(255, 69, 0, 0.08)';
     button.style.color = CONFIG.redditOrange;
   });
   button.addEventListener('mouseleave', () => {
     button.style.background = 'transparent';
-    button.style.color = '#878A8C';
+    button.style.color = 'var(--color-tone-2, #878A8C)';
   });
   button.addEventListener('mousedown', () => {
     button.style.transform = 'scale(0.94)';
@@ -292,7 +258,6 @@ function createJsonButton() {
     button.style.transform = 'scale(1)';
   });
 
-  // ── Keyboard support ──
   button.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -303,12 +268,8 @@ function createJsonButton() {
   return button;
 }
 
-/**
- * Returns SVG spinner HTML for the loading state.
- * @returns {string}
- */
 function createSpinner() {
-  return `<svg class="reddjson-spinner" width="14" height="14" viewBox="0 0 24 24" style="animation: reddjson-spin 0.8s linear infinite;">
+  return `<svg class="reddjson-spinner" width="16" height="16" viewBox="0 0 24 24" style="animation: reddjson-spin 0.8s linear infinite;">
     <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
   </svg>`;
 }
@@ -317,14 +278,8 @@ function createSpinner() {
 // POST DATA EXTRACTION
 // ============================================================================
 
-/**
- * Extracts post metadata from a <shreddit-post> element (New Reddit).
- * @param {HTMLElement} postElement
- * @returns {{permalink: string, postId: string, title: string, subreddit: string}|null}
- */
 function extractNewRedditPostData(postElement) {
   try {
-    // ── Permalink ──
     let permalink = postElement.getAttribute(SELECTORS.permalinkAttr)
       || postElement.getAttribute(SELECTORS.dataPermalink);
 
@@ -333,11 +288,15 @@ function extractNewRedditPostData(postElement) {
       if (link) permalink = link.getAttribute('href');
     }
     if (!permalink) {
+      // Try the full-post-link slot
+      const fullLink = postElement.querySelector('a[slot="full-post-link"]');
+      if (fullLink) permalink = fullLink.getAttribute('href');
+    }
+    if (!permalink) {
       console.warn('[ReddJSON] Could not find permalink for post element');
       return null;
     }
 
-    // ── Post ID ──
     let postId = postElement.getAttribute('id');
     if (!postId) {
       const fullname = postElement.getAttribute(SELECTORS.dataFullname);
@@ -348,16 +307,15 @@ function extractNewRedditPostData(postElement) {
       if (match) postId = match[1];
     }
 
-    // ── Title ──
     let title = '';
     const titleEl = postElement.querySelector(
       'h1, [slot="title"], a[data-click-id="body"] h3, a.title, [data-testid="post-title"]'
     );
     if (titleEl) title = titleEl.textContent.trim();
+    // Fallback: try post-title attribute
+    if (!title) title = postElement.getAttribute('post-title') || '';
 
-    // ── Subreddit ──
     let subreddit = '';
-    // Try subreddit-prefixed-name attribute first (most reliable on shreddit-post)
     subreddit = postElement.getAttribute('subreddit-prefixed-name')?.replace(/^r\//, '') || '';
     if (!subreddit) {
       const subEl = postElement.querySelector('[slot="subreddit-name"], a[href^="/r/"]');
@@ -375,14 +333,8 @@ function extractNewRedditPostData(postElement) {
   }
 }
 
-/**
- * Extracts post metadata from an Old Reddit .thing element.
- * @param {HTMLElement} postElement
- * @returns {{permalink: string, postId: string, title: string, subreddit: string}|null}
- */
 function extractOldRedditPostData(postElement) {
   try {
-    // ── Permalink ──
     let permalink = postElement.getAttribute('data-permalink')
       || postElement.getAttribute('data-url');
 
@@ -392,7 +344,6 @@ function extractOldRedditPostData(postElement) {
     }
     if (!permalink) return null;
 
-    // ── Post ID ──
     let postId = postElement.getAttribute('data-fullname');
     if (postId) {
       postId = postId.replace('t3_', '');
@@ -401,12 +352,10 @@ function extractOldRedditPostData(postElement) {
       if (classMatch) postId = classMatch[1];
     }
 
-    // ── Title ──
     let title = '';
     const titleEl = postElement.querySelector('a.title, .title a');
     if (titleEl) title = titleEl.textContent.trim();
 
-    // ── Subreddit ──
     let subreddit = '';
     const subLink = postElement.querySelector('a.subreddit, a[href^="/r/"]');
     if (subLink) {
@@ -421,12 +370,6 @@ function extractOldRedditPostData(postElement) {
   }
 }
 
-/**
- * Dispatches to the correct extraction function by Reddit version.
- * @param {HTMLElement} postElement
- * @param {'new'|'old'} type
- * @returns {{permalink: string, postId: string, title: string, subreddit: string}|null}
- */
 function extractPostData(postElement, type = 'new') {
   return type === 'old'
     ? extractOldRedditPostData(postElement)
@@ -437,24 +380,10 @@ function extractPostData(postElement, type = 'new') {
 // JSON COPY HANDLER
 // ============================================================================
 
-/**
- * Handles the JSON button click:
- *   1. Shows loading spinner
- *   2. Sends "fetchJSON" to background
- *   3. Copies pretty-printed JSON to clipboard
- *   4. Shows success/error toast
- *   5. Stores entry in history
- *
- * @async
- * @param {Event} event
- * @param {HTMLButtonElement} button
- * @param {object} postData
- */
 async function handleJsonCopy(event, button, postData) {
   event.preventDefault();
   event.stopPropagation();
 
-  // Prevent double-click
   if (button.disabled) return;
 
   const originalContent = button.innerHTML;
@@ -463,7 +392,6 @@ async function handleJsonCopy(event, button, postData) {
   button.style.cursor = 'wait';
 
   try {
-    // ── 1. Fetch JSON from Reddit via background service worker ──
     const response = await chrome.runtime.sendMessage({
       action: 'fetchJSON',
       permalink: postData.permalink
@@ -474,16 +402,10 @@ async function handleJsonCopy(event, button, postData) {
       return;
     }
 
-    // ── 2. Pretty-print the entire response ──
     const prettyJson = JSON.stringify(response.data, null, 2);
-
-    // ── 3. Copy to clipboard ──
     await navigator.clipboard.writeText(prettyJson);
-
-    // ── 4. Show success toast ──
     showToast('JSON copied!', 'success', button);
 
-    // ── 5. Add to history (fire-and-forget) ──
     chrome.runtime.sendMessage({
       action: 'addToHistory',
       entry: {
@@ -498,14 +420,12 @@ async function handleJsonCopy(event, button, postData) {
   } catch (error) {
     console.error('[ReddJSON] Copy error:', error);
 
-    // Clipboard can fail if page isn't focused
     if (error.name === 'NotAllowedError') {
       showToast('Focus this tab and try again', 'error', button);
     } else {
       showToast('Copy failed: ' + (error.message || 'Unknown error'), 'error', button);
     }
   } finally {
-    // Always restore button state
     button.innerHTML = originalContent;
     button.disabled = false;
     button.style.cursor = 'pointer';
@@ -513,13 +433,52 @@ async function handleJsonCopy(event, button, postData) {
 }
 
 // ============================================================================
-// BUTTON INJECTION
+// BUTTON INJECTION — NEW REDDIT
 // ============================================================================
 
 /**
+ * Finds the Share button's parent action bar in a <shreddit-post>.
+ * This is the BOTTOM action bar containing vote, comments, award, share.
+ * We inject our button right AFTER the share button so it sits next to it.
+ *
+ * @param {HTMLElement} postElement - The <shreddit-post> element
+ * @returns {{container: HTMLElement, shareButton: HTMLElement}|null}
+ */
+function findActionBar(postElement) {
+  // Strategy: find the Share button first, then its parent is the action bar
+  for (const selector of SELECTORS.shareButtonSelectors) {
+    // Search within the post element
+    const shareBtn = postElement.querySelector(selector);
+    if (shareBtn) {
+      return { container: shareBtn.parentElement, shareButton: shareBtn };
+    }
+  }
+
+  // Fallback: Try shadow DOM of shreddit-post if applicable
+  if (postElement.shadowRoot) {
+    for (const selector of SELECTORS.shareButtonSelectors) {
+      const shareBtn = postElement.shadowRoot.querySelector(selector);
+      if (shareBtn) {
+        return { container: shareBtn.parentElement, shareButton: shareBtn };
+      }
+    }
+  }
+
+  // Last fallback: search for any element containing "Share" text in the bottom area
+  const allButtons = postElement.querySelectorAll('button');
+  for (const btn of allButtons) {
+    const text = btn.textContent?.trim();
+    if (text === 'Share' || btn.getAttribute('aria-label')?.includes('Share')) {
+      return { container: btn.parentElement, shareButton: btn };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Injects a JSON button into a New Reddit <shreddit-post> element.
- * Finds the post's action bar and appends the button after existing actions.
- * @param {HTMLElement} postElement
+ * Places the button in the BOTTOM action bar, right after the Share button.
  */
 function injectButtonToNewRedditPost(postElement) {
   if (postElement.hasAttribute(CONFIG.markerAttribute)) return;
@@ -527,64 +486,27 @@ function injectButtonToNewRedditPost(postElement) {
   const postData = extractPostData(postElement, 'new');
   if (!postData?.permalink) return;
 
-  // ── Find the best injection point ──
-  let injectionPoint = null;
-
-  // Strategy 1: Look for the post action bar / actions slot
-  const actionBarSelectors = [
-    'shreddit-post-overflow-menu',
-    '[slot="post-actions"]',
-    'shreddit-post-action-bar',
-    '.post-action-bar',
-    '[data-testid="post-action-bar"]',
-  ];
-  for (const sel of actionBarSelectors) {
-    injectionPoint = postElement.querySelector(sel);
-    if (injectionPoint) {
-      // If we found the overflow menu, inject into its parent instead
-      if (sel === 'shreddit-post-overflow-menu') {
-        injectionPoint = injectionPoint.parentElement;
-      }
-      break;
-    }
+  // Find the action bar and share button
+  const actionBar = findActionBar(postElement);
+  if (!actionBar) {
+    // If we can't find the action bar yet, the post might still be loading
+    // We'll try again on the next mutation observer pass
+    console.debug('[ReddJSON] Action bar not found for post, will retry:', postData.permalink);
+    return;
   }
 
-  // Strategy 2: Find share button and inject alongside it
-  if (!injectionPoint) {
-    const shareBtn = postElement.querySelector(SELECTORS.shareButton);
-    if (shareBtn) injectionPoint = shareBtn.parentElement;
-  }
-
-  // Strategy 3: Fall back to any toolbar-like container
-  if (!injectionPoint) {
-    const meta = postElement.querySelector('[slot="post-meta"]');
-    if (meta) injectionPoint = meta;
-  }
-
-  if (!injectionPoint) {
-    // Last resort: just append to the post element itself
-    // This ensures the button always appears even if Reddit restructures
-    injectionPoint = postElement;
-  }
-
-  // ── Create and insert button ──
   const button = createJsonButton();
   button.addEventListener('click', (e) => handleJsonCopy(e, button, postData));
 
-  // Insert after the last child button/tracker
-  const siblings = injectionPoint.querySelectorAll(':scope > button, :scope > faceplate-tracker, :scope > shreddit-post-share-button');
-  if (siblings.length > 0) {
-    siblings[siblings.length - 1].after(button);
-  } else {
-    injectionPoint.appendChild(button);
-  }
+  // Insert AFTER the share button so it appears next to it
+  actionBar.shareButton.after(button);
 
   postElement.setAttribute(CONFIG.markerAttribute, 'true');
+  console.debug('[ReddJSON] ✓ Button injected for:', postData.permalink);
 }
 
 /**
  * Injects a JSON button into an Old Reddit .thing element.
- * @param {HTMLElement} postElement
  */
 function injectButtonToOldRedditPost(postElement) {
   if (postElement.hasAttribute(CONFIG.markerAttribute)) return;
@@ -604,11 +526,11 @@ function injectButtonToOldRedditPost(postElement) {
     border-radius: 3px;
     font-size: 11px;
     margin: 0 2px;
+    height: auto;
   `;
 
   button.addEventListener('click', (e) => handleJsonCopy(e, button, postData));
 
-  // Wrap in <li> for old Reddit's toolbar (it's a flat-list)
   const listItem = document.createElement('li');
   listItem.className = 'reddjson-old-reddit-item';
   listItem.style.display = 'inline-block';
@@ -618,10 +540,10 @@ function injectButtonToOldRedditPost(postElement) {
   postElement.setAttribute(CONFIG.markerAttribute, 'true');
 }
 
-/**
- * Scans the page for all posts and injects buttons where missing.
- * Safe to call repeatedly — skips already-processed posts.
- */
+// ============================================================================
+// POST PROCESSING
+// ============================================================================
+
 function processAllPosts() {
   if (isProcessing) return;
   isProcessing = true;
@@ -643,7 +565,7 @@ function processAllPosts() {
         }
       });
 
-      // Fallback: check [data-testid="post-container"] and find parent shreddit-post
+      // Fallback: check [data-testid="post-container"]
       document.querySelectorAll(SELECTORS.postContainer).forEach(container => {
         const parentPost = container.closest(SELECTORS.shredditPost);
         if (parentPost && !parentPost.hasAttribute(CONFIG.markerAttribute)) {
@@ -662,10 +584,6 @@ function processAllPosts() {
 // MUTATION OBSERVER
 // ============================================================================
 
-/**
- * Creates and starts a MutationObserver to watch for dynamically loaded posts.
- * Reddit uses infinite scroll, so new posts are added to the DOM constantly.
- */
 function startObserver() {
   const debouncedProcess = debounce(processAllPosts, CONFIG.observerDebounce);
 
@@ -698,7 +616,6 @@ function startObserver() {
     }
   });
 
-  // Find the narrowest possible container to observe
   let observeTarget = document.body;
   for (const selector of SELECTORS.feedContainers) {
     const container = document.querySelector(selector);
@@ -720,10 +637,6 @@ function startObserver() {
 // STYLE INJECTION
 // ============================================================================
 
-/**
- * Injects CSS animations and overrides into the page <head>.
- * Uses a unique ID to prevent duplicate injection.
- */
 function injectStyles() {
   const styleId = 'reddjson-injected-styles';
   if (document.getElementById(styleId)) return;
@@ -731,16 +644,9 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = styleId;
   style.textContent = `
-    /* ═══ ReddJSON Extension Styles ═══ */
-
     @keyframes reddjson-spin {
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
-    }
-
-    @keyframes reddjson-fade-in {
-      from { opacity: 0; transform: translateY(-8px); }
-      to   { opacity: 1; transform: translateY(0); }
     }
 
     .reddjson-button {
@@ -775,10 +681,6 @@ function injectStyles() {
 // INITIALIZATION
 // ============================================================================
 
-/**
- * Main initialization entry point.
- * Called once the DOM is ready.
- */
 function init() {
   console.log('[ReddJSON] Content script initializing…');
 
@@ -786,25 +688,26 @@ function init() {
   processAllPosts();
   startObserver();
 
+  // Retry after a short delay for posts that were still loading
+  setTimeout(processAllPosts, 1000);
+  setTimeout(processAllPosts, 3000);
+
   console.log('[ReddJSON] Content script initialized ✓');
 }
 
-// ── Start when DOM is ready ──
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
-  // Slight delay to let Reddit's custom elements register
   setTimeout(init, 150);
 }
 
-// ── Handle SPA-style navigation (URL changes without page reload) ──
+// Handle SPA-style navigation
 let lastUrl = location.href;
 new MutationObserver(() => {
   const currentUrl = location.href;
   if (currentUrl !== lastUrl) {
     lastUrl = currentUrl;
     console.log('[ReddJSON] URL changed → reprocessing…');
-    // Clear markers so buttons can be re-injected in new context
     document.querySelectorAll(`[${CONFIG.markerAttribute}]`).forEach(el => {
       el.removeAttribute(CONFIG.markerAttribute);
     });
