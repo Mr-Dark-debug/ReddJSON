@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Installation — ReddJSON</title>
+    <meta name="description"
+        content="Install ReddJSON Chrome extension in under a minute. Load unpacked or install from Chrome Web Store.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="../icons/reddjosn.svg" type="image/svg+xml">
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </a>
+            <ul class="nav-links">
+                <li><a href="features.html">Features</a></li>
+                <li><a href="installation.html">Installation</a></li>
+                <li><a href="usage.html">Usage</a></li>
+                <li>
+                    <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                        class="nav-github">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                        </svg>
+                        GitHub
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="page-header">
+        <h1>Installation</h1>
+        <p>Get ReddJSON up and running in under a minute. Two installation methods available.</p>
+    </section>
+
+    <!-- Installation Methods -->
+    <section class="section">
+        <div class="content-area">
+
+            <h2>Method 1: Load Unpacked (Developer Mode)</h2>
+            <p>This is the recommended way to install ReddJSON right now. It takes less than a minute.</p>
+
+            <div class="install-steps">
+                <div class="install-step">
+                    <h3>Clone or Download the Repository</h3>
+                    <p>Get the source code from GitHub:</p>
+                    <pre><code>git clone https://github.com/Mr-Dark-debug/ReddJSON.git</code></pre>
+                    <p>Or download the ZIP file from the <a href="https://github.com/Mr-Dark-debug/ReddJSON"
+                            target="_blank" rel="noopener">GitHub repository</a> and extract it.</p>
+                </div>
+
+                <div class="install-step">
+                    <h3>Open Chrome Extensions Page</h3>
+                    <p>Navigate to <code>chrome://extensions/</code> in your Chrome browser. You can also access this
+                        from the menu: <strong>More Tools → Extensions</strong>.</p>
+                </div>
+
+                <div class="install-step">
+                    <h3>Enable Developer Mode</h3>
+                    <p>Toggle the <strong>Developer mode</strong> switch in the top-right corner of the extensions page.
+                        This enables the "Load unpacked" button.</p>
+                </div>
+
+                <div class="install-step">
+                    <h3>Click "Load Unpacked"</h3>
+                    <p>Click the <strong>"Load unpacked"</strong> button that appears in the top-left area of the page.
+                    </p>
+                </div>
+
+                <div class="install-step">
+                    <h3>Select the ReddJSON Folder</h3>
+                    <p>Browse to and select the <code>ReddJSON</code> folder (the one containing
+                        <code>manifest.json</code>). Click <strong>"Select Folder"</strong>.</p>
+                </div>
+
+                <div class="install-step">
+                    <h3>You're Ready!</h3>
+                    <p>The ReddJSON extension icon appears in your browser toolbar. Navigate to any Reddit post and
+                        you'll see the <code>{ } JSON</code> button in the post's action bar.</p>
+                </div>
+            </div>
+
+            <h2>Method 2: Chrome Web Store</h2>
+            <p>ReddJSON will be available on the Chrome Web Store soon. This method provides automatic updates and
+                easier installation.</p>
+            <div class="feature-card" style="margin: 1.5rem 0;">
+                <div class="feature-icon">&#128679;</div>
+                <h3>Coming Soon</h3>
+                <p>Chrome Web Store submission is in progress. For now, use the Load Unpacked method above. Star the <a
+                        href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener">GitHub
+                        repository</a> to get notified when it's available.</p>
+            </div>
+
+            <h2>Updating the Extension</h2>
+            <p>When using Load Unpacked mode, updates are manual:</p>
+            <ol>
+                <li>Pull the latest changes: <code>git pull origin main</code></li>
+                <li>Go to <code>chrome://extensions/</code></li>
+                <li>Find ReddJSON and click the <strong>refresh</strong> icon (circular arrow)</li>
+                <li>The extension is now updated to the latest version</li>
+            </ol>
+
+            <h2>Uninstalling</h2>
+            <p>To remove ReddJSON:</p>
+            <ol>
+                <li>Go to <code>chrome://extensions/</code></li>
+                <li>Find ReddJSON in the list</li>
+                <li>Click <strong>"Remove"</strong></li>
+                <li>Confirm the removal</li>
+            </ol>
+            <p>Note: Uninstalling will delete all stored copy history.</p>
+
+            <h2>System Requirements</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Requirement</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Browser</td>
+                        <td>Google Chrome (or Chromium-based browsers)</td>
+                    </tr>
+                    <tr>
+                        <td>Chrome Version</td>
+                        <td>88+ (Manifest V3 support required)</td>
+                    </tr>
+                    <tr>
+                        <td>Permissions</td>
+                        <td>Storage, Active Tab, Side Panel</td>
+                    </tr>
+                    <tr>
+                        <td>Network</td>
+                        <td>Access to reddit.com and AI provider APIs (optional)</td>
+                    </tr>
+                    <tr>
+                        <td>Disk Space</td>
+                        <td>Less than 1 MB</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Troubleshooting Installation</h2>
+
+            <h3>"Manifest file is missing or unreadable"</h3>
+            <p>Make sure you selected the correct folder — the one containing <code>manifest.json</code>, not a parent
+                folder.</p>
+
+            <h3>Extension icon not appearing</h3>
+            <p>Click the puzzle piece icon in Chrome's toolbar and pin ReddJSON to make it always visible.</p>
+
+            <h3>Buttons not appearing on Reddit</h3>
+            <p>Open DevTools Console (F12) and look for <code>[ReddJSON]</code> log messages. Check that the extension
+                is enabled on <code>chrome://extensions/</code>.</p>
+
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <h2>Installed Successfully?</h2>
+        <p>Learn how to use all of ReddJSON's features.</p>
+        <div class="hero-buttons">
+            <a href="usage.html" class="btn btn-primary">
+                View Usage Guide
+            </a>
+            <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                class="btn btn-secondary">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+                GitHub Repo
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </div>
+            <div class="footer-links">
+                <a href="features.html">Features</a>
+                <a href="installation.html">Installation</a>
+                <a href="usage.html">Usage</a>
+                <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener">GitHub</a>
+            </div>
+            <div class="footer-copy">
+                &copy; 2025 ReddJSON. MIT License.
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>

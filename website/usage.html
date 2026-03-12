@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usage Guide — ReddJSON</title>
+    <meta name="description"
+        content="Learn how to use ReddJSON Chrome extension — copy JSON, manage history, generate AI posts, and more.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="../icons/reddjosn.svg" type="image/svg+xml">
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </a>
+            <ul class="nav-links">
+                <li><a href="features.html">Features</a></li>
+                <li><a href="installation.html">Installation</a></li>
+                <li><a href="usage.html">Usage</a></li>
+                <li>
+                    <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                        class="nav-github">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                        </svg>
+                        GitHub
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="page-header">
+        <h1>Usage Guide</h1>
+        <p>Learn how to use every feature of ReddJSON — from copying JSON to generating AI posts.</p>
+    </section>
+
+    <!-- Usage Content -->
+    <section class="section">
+        <div class="content-area">
+
+            <h2>Copying Post JSON</h2>
+            <p>The core feature of ReddJSON — copying Reddit post data as JSON.</p>
+
+            <h3>Step-by-Step</h3>
+            <ol>
+                <li>Browse any Reddit page — <code>www.reddit.com</code> or <code>old.reddit.com</code></li>
+                <li>Find the <strong><code>{ } JSON</code></strong> button in any post's action bar (next to Share,
+                    Save, etc.)</li>
+                <li>Click the button — a green toast <strong>"JSON copied!"</strong> appears</li>
+                <li>Paste the JSON anywhere: VS Code, Postman, Python scripts, etc.</li>
+            </ol>
+
+            <h3>What Gets Copied</h3>
+            <p>The copied JSON is the full Reddit API response, which includes:</p>
+            <ul>
+                <li><strong>Post data</strong> — title, author, subreddit, score, URL, selftext, created_utc, and more
+                </li>
+                <li><strong>Comments</strong> — all comments with nested replies, scores, authors, and timestamps</li>
+                <li><strong>Metadata</strong> — post type, flair, awards, gilded status, etc.</li>
+            </ul>
+            <p>The JSON is pretty-printed with 2-space indentation for readability.</p>
+
+            <h2>Using the Sidebar</h2>
+            <p>Click the ReddJSON extension icon in your browser toolbar to open the sidebar panel.</p>
+
+            <h3>Viewing Copy History</h3>
+            <p>The sidebar shows your last 50 copied posts as cards. Each card displays:</p>
+            <ul>
+                <li>Post title (clickable — opens the original Reddit post)</li>
+                <li>Subreddit badge (e.g., r/javascript)</li>
+                <li>Relative timestamp (e.g., "2 hours ago")</li>
+                <li>Action buttons: Copy, View, Delete</li>
+            </ul>
+
+            <h3>Searching History</h3>
+            <p>Use the search bar at the top of the sidebar to filter your history. You can search by:</p>
+            <ul>
+                <li>Post title</li>
+                <li>Subreddit name</li>
+                <li>Post ID</li>
+            </ul>
+            <p>Search is debounced for smooth performance — results update as you type.</p>
+
+            <h3>Re-Copying JSON</h3>
+            <p>Click the <strong>"Copy"</strong> button on any history card to re-copy that post's full JSON to your
+                clipboard. No need to revisit the Reddit post.</p>
+
+            <h3>Viewing JSON</h3>
+            <p>Click the <strong>"View"</strong> button to open a full-screen modal with the JSON displayed in a dark,
+                syntax-highlighted code block. The modal includes:</p>
+            <ul>
+                <li>Formatted JSON with syntax highlighting</li>
+                <li>Copy button to copy the JSON from the modal</li>
+                <li>Backdrop blur effect</li>
+                <li>Press <code>Escape</code> to close</li>
+            </ul>
+
+            <h3>Exporting History</h3>
+            <p>Click the <strong>"Export"</strong> button to download your entire copy history as a timestamped
+                <code>.json</code> file. The export includes all stored entries with their full JSON data.</p>
+
+            <h3>Clearing History</h3>
+            <p>Click <strong>"Clear All"</strong> to remove all history entries. A confirmation dialog prevents
+                accidental deletion.</p>
+
+            <h2>AI Post Generator</h2>
+            <p>ReddJSON can generate LinkedIn posts from Reddit content using AI.</p>
+
+            <h3>Setting Up AI Providers</h3>
+            <ol>
+                <li>Open the ReddJSON sidebar</li>
+                <li>Go to <strong>Settings</strong></li>
+                <li>Choose your AI provider: <strong>OpenRouter</strong> or <strong>Groq</strong></li>
+                <li>Enter your API key for the selected provider</li>
+                <li>Save settings</li>
+            </ol>
+
+            <h3>Generating a LinkedIn Post</h3>
+            <ol>
+                <li>Copy a Reddit post's JSON (click the JSON button on any post)</li>
+                <li>Open the ReddJSON sidebar</li>
+                <li>Find the copied post in your history</li>
+                <li>Click the <strong>"Generate LinkedIn Post"</strong> button</li>
+                <li>The AI generates a professional LinkedIn post based on the Reddit content</li>
+                <li>Copy the generated post and use it on LinkedIn</li>
+            </ol>
+
+            <h2>Keyboard Shortcuts</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Shortcut</th>
+                        <th>Action</th>
+                        <th>Context</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Ctrl+F</code> / <code>Cmd+F</code></td>
+                        <td>Focus search input</td>
+                        <td>Sidebar popup</td>
+                    </tr>
+                    <tr>
+                        <td><code>Escape</code></td>
+                        <td>Close any open modal</td>
+                        <td>Sidebar popup</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Toast Notifications</h2>
+            <p>ReddJSON shows floating toast notifications for various events:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Appearance</th>
+                        <th>When Shown</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Success</td>
+                        <td>Green pill with checkmark</td>
+                        <td>JSON copied successfully</td>
+                    </tr>
+                    <tr>
+                        <td>Error</td>
+                        <td>Red pill with X icon</td>
+                        <td>Network error, private sub, rate limit</td>
+                    </tr>
+                    <tr>
+                        <td>Info</td>
+                        <td>Orange pill with info icon</td>
+                        <td>Focus tab warning, loading states</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>Toasts auto-dismiss after 2 seconds and appear near the clicked button.</p>
+
+            <h2>How It Works Under the Hood</h2>
+
+            <h3>The Reddit .json Endpoint</h3>
+            <p>Every Reddit URL supports appending <code>.json</code> to get raw data:</p>
+            <pre><code>https://www.reddit.com/r/javascript/comments/abc123/post_title/.json</code></pre>
+            <p>The response is an array of two "Listing" objects:</p>
+            <pre><code>[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [{
+        "kind": "t3",
+        "data": {
+          "subreddit": "javascript",
+          "title": "Post Title",
+          "author": "username",
+          "score": 42,
+          "selftext": "Post body...",
+          "created_utc": 1710000000
+        }
+      }]
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [/* comments */]
+    }
+  }
+]</code></pre>
+
+            <h3>Architecture</h3>
+            <p>ReddJSON uses a clean separation of concerns:</p>
+            <ul>
+                <li><strong>Content Script</strong> (<code>content.js</code>) — Injects buttons into Reddit pages,
+                    handles clicks, shows toasts, observes DOM changes</li>
+                <li><strong>Background Worker</strong> (<code>background.js</code>) — Fetches Reddit JSON API, manages
+                    storage operations</li>
+                <li><strong>Sidebar</strong> (<code>sidebar.html/js/css</code>) — History viewer, search, AI post
+                    generation, settings</li>
+                <li><strong>Storage</strong> (<code>chrome.storage.local</code>) — Persists history entries and settings
+                </li>
+            </ul>
+
+            <h2>Troubleshooting</h2>
+
+            <h3>Buttons Not Appearing</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Issue</th>
+                        <th>Solution</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>No buttons on any posts</td>
+                        <td>Open DevTools Console (F12) and check for <code>[ReddJSON]</code> logs</td>
+                    </tr>
+                    <tr>
+                        <td>Reddit UI changed</td>
+                        <td>Selectors may need updating — report on GitHub</td>
+                    </tr>
+                    <tr>
+                        <td>Extension not loading</td>
+                        <td>Check <code>chrome://extensions</code> and ensure extension is enabled</td>
+                    </tr>
+                    <tr>
+                        <td>Conflicting extensions</td>
+                        <td>Disable other Reddit extensions temporarily</td>
+                    </tr>
+                    <tr>
+                        <td>SPA navigation issue</td>
+                        <td>Try hard refresh (<code>Ctrl+Shift+R</code>)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>JSON Not Copying</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Issue</th>
+                        <th>Solution</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>"Focus this tab" error</td>
+                        <td>Click on the Reddit tab first, then click the JSON button</td>
+                    </tr>
+                    <tr>
+                        <td>Network error</td>
+                        <td>Check your internet connection</td>
+                    </tr>
+                    <tr>
+                        <td>Private subreddit</td>
+                        <td>Extension shows error toast — this is expected behavior</td>
+                    </tr>
+                    <tr>
+                        <td>Rate limited</td>
+                        <td>Wait a moment and try again</td>
+                    </tr>
+                    <tr>
+                        <td>Very large JSON</td>
+                        <td>May take longer — button shows spinner while loading</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Contributing</h2>
+            <p>Want to improve ReddJSON? Contributions are welcome!</p>
+            <ol>
+                <li>Fork the <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank"
+                        rel="noopener">repository</a></li>
+                <li>Create a feature branch: <code>git checkout -b feature/awesome-thing</code></li>
+                <li>Make your changes</li>
+                <li>Test on both <code>www.reddit.com</code> and <code>old.reddit.com</code></li>
+                <li>Commit: <code>git commit -m 'Add awesome thing'</code></li>
+                <li>Push: <code>git push origin feature/awesome-thing</code></li>
+                <li>Open a Pull Request</li>
+            </ol>
+
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <h2>Have Questions?</h2>
+        <p>Check the GitHub repository for more details or to report issues.</p>
+        <div class="hero-buttons">
+            <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+                Open GitHub Issues
+            </a>
+            <a href="features.html" class="btn btn-secondary">
+                View All Features
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </div>
+            <div class="footer-links">
+                <a href="features.html">Features</a>
+                <a href="installation.html">Installation</a>
+                <a href="usage.html">Usage</a>
+                <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener">GitHub</a>
+            </div>
+            <div class="footer-copy">
+                &copy; 2025 ReddJSON. MIT License.
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>

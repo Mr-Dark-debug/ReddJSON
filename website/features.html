@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Features — ReddJSON</title>
+    <meta name="description"
+        content="Explore all features of ReddJSON Chrome extension — one-click JSON copy, history, AI post generation, and more.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="../icons/reddjosn.svg" type="image/svg+xml">
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </a>
+            <ul class="nav-links">
+                <li><a href="features.html">Features</a></li>
+                <li><a href="installation.html">Installation</a></li>
+                <li><a href="usage.html">Usage</a></li>
+                <li>
+                    <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                        class="nav-github">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                        </svg>
+                        GitHub
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="page-header">
+        <h1>Features</h1>
+        <p>Everything ReddJSON offers — from one-click JSON copying to AI-powered post generation.</p>
+    </section>
+
+    <!-- Core Features -->
+    <section class="section">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Core Features</h2>
+                <p>The essentials that make ReddJSON indispensable for Reddit data work.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">&#128203;</div>
+                    <h3>One-Click JSON Copy</h3>
+                    <p>Click the <code>{ } JSON</code> button on any Reddit post to instantly copy the full,
+                        pretty-printed JSON response to your clipboard. The JSON includes the complete post data and all
+                        comments.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#127912;</div>
+                    <h3>Native Reddit Integration</h3>
+                    <p>The JSON button is styled to match Reddit's native UI perfectly — same font, same spacing, same
+                        hover effects. It looks like it belongs there because it's designed to.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128260;</div>
+                    <h3>Infinite Scroll Support</h3>
+                    <p>Reddit uses infinite scroll and SPA navigation. ReddJSON uses MutationObserver to automatically
+                        detect and add JSON buttons to new posts as they load — no page refresh needed.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#127760;</div>
+                    <h3>Dual Reddit Support</h3>
+                    <p>Works on both <code>www.reddit.com</code> (new Reddit with shreddit-post elements) and
+                        <code>old.reddit.com</code> (classic Reddit with .thing.link elements). Dedicated selectors for
+                        each.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- History & Management -->
+    <section class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>History & Management</h2>
+                <p>Keep track of every JSON you've copied with powerful history features.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">&#128203;</div>
+                    <h3>Persistent Copy History</h3>
+                    <p>Your last 50 copied posts are stored in <code>chrome.storage.local</code> and persist across
+                        browser sessions. Each entry includes title, subreddit, post ID, timestamp, and full JSON.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128269;</div>
+                    <h3>Search & Filter</h3>
+                    <p>Quickly find any previously copied post by searching through titles, subreddit names, or post
+                        IDs. Debounced search for smooth performance.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128190;</div>
+                    <h3>Export as JSON File</h3>
+                    <p>Download your entire copy history as a timestamped <code>.json</code> file. Perfect for backups,
+                        analysis, or importing into other tools.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128065;</div>
+                    <h3>JSON Viewer Modal</h3>
+                    <p>View any previously copied JSON in a full-screen modal with syntax highlighting. Dark theme for
+                        comfortable reading, with a copy button for quick re-copy.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128279;</div>
+                    <h3>Open Original Post</h3>
+                    <p>Click any history entry's title to open the original Reddit post in a new tab. Quick way to
+                        revisit the source.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128465;</div>
+                    <h3>Delete & Clear</h3>
+                    <p>Remove individual entries or clear all history with confirmation dialogs. Full control over your
+                        stored data.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Features -->
+    <section class="section">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>AI-Powered Features</h2>
+                <p>Generate content from Reddit posts using AI providers.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">&#129302;</div>
+                    <h3>LinkedIn Post Generator</h3>
+                    <p>Transform any Reddit post into a viral-ready LinkedIn post with one click. The AI analyzes the
+                        content and generates engaging professional social media copy.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128268;</div>
+                    <h3>Multiple AI Providers</h3>
+                    <p>Supports both OpenRouter and Groq as AI providers. Configure your API keys in the sidebar
+                        settings and switch between providers as needed.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#9881;&#65039;</div>
+                    <h3>Configurable Settings</h3>
+                    <p>Manage AI provider settings, API keys, and preferences directly from the sidebar. Settings are
+                        stored locally and persist across sessions.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technical Features -->
+    <section class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Technical Highlights</h2>
+                <p>Built with performance, reliability, and developer experience in mind.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">&#9889;</div>
+                    <h3>Zero Dependencies</h3>
+                    <p>No external libraries, no npm packages, no build step. Pure vanilla JavaScript that loads
+                        instantly and has zero supply chain risk.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128274;</div>
+                    <h3>Manifest V3</h3>
+                    <p>Built on Chrome's latest extension platform for better security, performance, and future
+                        compatibility. Required for Chrome Web Store submissions.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#9888;&#65039;</div>
+                    <h3>Robust Error Handling</h3>
+                    <p>Graceful handling of network errors, 403 forbidden (private subs), 404 not found, 429 rate
+                        limits, and 5xx server errors. User-friendly toast notifications for every scenario.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128736;</div>
+                    <h3>Service Worker Architecture</h3>
+                    <p>Background service worker handles API fetching and storage operations. Content script stays
+                        lightweight, focused on DOM manipulation and UI.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128275;</div>
+                    <h3>Privacy First</h3>
+                    <p>Uses <code>credentials: 'omit'</code> for API requests. No cookies are sent to Reddit's JSON
+                        endpoint. All data stored locally on your machine.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128221;</div>
+                    <h3>Keyboard Shortcuts</h3>
+                    <p><code>Ctrl+F</code> / <code>Cmd+F</code> to focus search, <code>Escape</code> to close modals.
+                        Efficient keyboard-driven workflow.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <h2>Ready to Try These Features?</h2>
+        <p>Install ReddJSON and start using all these features today.</p>
+        <div class="hero-buttons">
+            <a href="installation.html" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Install Now
+            </a>
+            <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                class="btn btn-secondary">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+                View Source
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </div>
+            <div class="footer-links">
+                <a href="features.html">Features</a>
+                <a href="installation.html">Installation</a>
+                <a href="usage.html">Usage</a>
+                <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener">GitHub</a>
+            </div>
+            <div class="footer-copy">
+                &copy; 2025 ReddJSON. MIT License.
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>

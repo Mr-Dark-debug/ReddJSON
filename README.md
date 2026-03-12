@@ -16,6 +16,8 @@
   <img src="https://img.shields.io/badge/zero-dependencies-blueviolet?style=flat-square" alt="Zero Dependencies">
 </p>
 
+**ReddJSON** is a powerful Chrome extension that bridges the gap between Reddit insights and LinkedIn professional networking. 
+
 ---
 
 ## ✨ Features

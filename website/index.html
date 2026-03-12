@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReddJSON — Copy Reddit Post JSON with One Click</title>
+    <meta name="description"
+        content="A beautiful Chrome extension that adds a native JSON button to every Reddit post. Copy full post data with one click.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="../icons/reddjosn.svg" type="image/svg+xml">
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </a>
+            <ul class="nav-links">
+                <li><a href="features.html">Features</a></li>
+                <li><a href="installation.html">Installation</a></li>
+                <li><a href="usage.html">Usage</a></li>
+                <li>
+                    <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                        class="nav-github">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                        </svg>
+                        GitHub
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">Chrome Extension v2.0</div>
+            <div class="hero-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON Logo">
+            </div>
+            <h1>Copy Reddit Post <span>JSON</span> with One Click</h1>
+            <p class="hero-subtitle">
+                A beautiful Chrome extension that adds a native JSON button to every Reddit post.
+                Get full post data, comments, and metadata — instantly.
+            </p>
+            <div class="hero-buttons">
+                <a href="installation.html" class="btn btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                    </svg>
+                    Install Extension
+                </a>
+                <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                    class="btn btn-secondary">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                    </svg>
+                    View on GitHub
+                </a>
+            </div>
+            <div class="hero-badges">
+                <span class="badge badge-orange">Manifest V3</span>
+                <span class="badge badge-blue">Chrome Extension</span>
+                <span class="badge badge-green">MIT License</span>
+                <span class="badge badge-purple">Zero Dependencies</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section" id="features">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Everything You Need</h2>
+                <p>Powerful features designed for Reddit developers, data enthusiasts, and content creators.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">&#128203;</div>
+                    <h3>One-Click Copy</h3>
+                    <p>Click the <code>{ } JSON</code> button on any post to copy the full, pretty-printed JSON to your
+                        clipboard instantly.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#127912;</div>
+                    <h3>Native Integration</h3>
+                    <p>Button seamlessly blends into Reddit's toolbar with matching colors, spacing, and hover effects.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128260;</div>
+                    <h3>Infinite Scroll Support</h3>
+                    <p>Automatically adds buttons to new posts as you scroll using MutationObserver — no page reload
+                        needed.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#127760;</div>
+                    <h3>Dual Reddit Support</h3>
+                    <p>Works on both <code>www.reddit.com</code> (new Reddit) and <code>old.reddit.com</code> with
+                        dedicated selectors.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128203;</div>
+                    <h3>Copy History</h3>
+                    <p>Popup shows your last 50 copied posts with persistent storage. Search, re-copy, or view any
+                        previous entry.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#129302;</div>
+                    <h3>AI Post Generator</h3>
+                    <p>Generate viral LinkedIn posts from Reddit content with one click using OpenRouter or Groq AI
+                        providers.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#128190;</div>
+                    <h3>Export History</h3>
+                    <p>Download your entire copy history as a timestamped JSON file for backup or analysis.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#9888;&#65039;</div>
+                    <h3>Error Handling</h3>
+                    <p>Graceful toast notifications for network errors, private subs, rate limits, and focus issues.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#9889;</div>
+                    <h3>Zero Dependencies</h3>
+                    <p>No external libraries, no build step, no npm install. Pure vanilla JavaScript — instant load.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>How It Works</h2>
+                <p>ReddJSON leverages Reddit's built-in JSON endpoint to fetch raw post data.</p>
+            </div>
+            <div class="steps-container">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h3>Browse Reddit</h3>
+                    <p>Navigate to any Reddit post on new or old Reddit. The JSON button appears automatically.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h3>Click JSON Button</h3>
+                    <p>Click the <code>{ } JSON</code> button in the post's action bar. The extension fetches the raw
+                        data.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h3>Data Copied</h3>
+                    <p>Full post JSON with comments is copied to your clipboard. A green toast confirms success.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">4</div>
+                    <h3>Use Anywhere</h3>
+                    <p>Paste the JSON into VS Code, Postman, Python scripts, or any tool that accepts JSON data.</p>
+                </div>
+            </div>
+
+            <div class="code-block">
+                <pre><span class="comment">// Every Reddit URL supports .json endpoint</span>
+<span class="string">https://www.reddit.com/r/javascript/comments/abc123/.json</span>
+
+<span class="comment">// Returns an array with post data and comments</span>
+[
+  {
+    <span class="key">"kind"</span>: <span class="string">"Listing"</span>,
+    <span class="key">"data"</span>: {
+      <span class="key">"children"</span>: [{
+        <span class="key">"kind"</span>: <span class="string">"t3"</span>,
+        <span class="key">"data"</span>: {
+          <span class="key">"subreddit"</span>: <span class="string">"javascript"</span>,
+          <span class="key">"title"</span>: <span class="string">"Post Title"</span>,
+          <span class="key">"author"</span>: <span class="string">"username"</span>,
+          <span class="key">"score"</span>: 42,
+          <span class="key">"selftext"</span>: <span class="string">"Post body..."</span>
+        }
+      }]
+    }
+  },
+  { <span class="key">"kind"</span>: <span class="string">"Listing"</span>, <span class="key">"data"</span>: { <span class="key">"children"</span>: [<span class="comment">/* comments */</span>] } }
+]</pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="section">
+        <div class="section-container">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-number">10</div>
+                    <div class="stat-label">Features</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">0</div>
+                    <div class="stat-label">Dependencies</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">50</div>
+                    <div class="stat-label">History Entries</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">Reddit Versions</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Screenshots -->
+    <section class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>See It In Action</h2>
+                <p>Clean, native-looking UI that feels like part of Reddit itself.</p>
+            </div>
+            <div class="screenshots-grid">
+                <div class="screenshot-card">
+                    <img src="https://github.com/user-attachments/assets/d0ec2ea7-6e5a-4fe2-962e-faf9ac41af5c"
+                        alt="JSON Button in Reddit Feed">
+                    <div class="caption">
+                        <h3>JSON Button in Feed</h3>
+                        <p>The button appears in every post's action bar with Reddit-orange hover effect.</p>
+                    </div>
+                </div>
+                <div class="screenshot-card">
+                    <img src="https://github.com/user-attachments/assets/579756d6-5f99-445a-a24f-35ff9050383d"
+                        alt="Sidebar Copy History">
+                    <div class="caption">
+                        <h3>Copy History Sidebar</h3>
+                        <p>Modern sidebar with search, stats, and scrollable history cards.</p>
+                    </div>
+                </div>
+                <div class="screenshot-card">
+                    <img src="https://github.com/user-attachments/assets/efb868f2-5a7e-41c1-81dc-d7535534fef1"
+                        alt="JSON Viewer Modal">
+                    <div class="caption">
+                        <h3>JSON Viewer Modal</h3>
+                        <p>Full JSON viewer with syntax highlighting, copy button, and backdrop blur.</p>
+                    </div>
+                </div>
+                <div class="screenshot-card">
+                    <img src="https://github.com/user-attachments/assets/2f449d4e-f5d4-44e6-beff-b69d2ca6a412"
+                        alt="AI Post Generator">
+                    <div class="caption">
+                        <h3>AI Post Generator</h3>
+                        <p>Generate viral LinkedIn posts from Reddit content with one click.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <h2>Ready to Get Started?</h2>
+        <p>Install ReddJSON in under a minute and start copying Reddit JSON today.</p>
+        <div class="hero-buttons">
+            <a href="installation.html" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Install Now
+            </a>
+            <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener"
+                class="btn btn-secondary">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+                Star on GitHub
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-logo">
+                <img src="../icons/reddjosn.svg" alt="ReddJSON">
+                ReddJSON
+            </div>
+            <div class="footer-links">
+                <a href="features.html">Features</a>
+                <a href="installation.html">Installation</a>
+                <a href="usage.html">Usage</a>
+                <a href="https://github.com/Mr-Dark-debug/ReddJSON" target="_blank" rel="noopener">GitHub</a>
+            </div>
+            <div class="footer-copy">
+                &copy; 2025 ReddJSON. MIT License.
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>
