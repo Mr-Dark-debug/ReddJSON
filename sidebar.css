@@ -1,32 +1,32 @@
 /* ═══════════════════════════════════════════════════════════════
-   ReddJSON Sidebar v2.0 — Premium Dark UI
+   ReddJSON Sidebar v2.0 — Premium Light UI
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Reset & Variables ── */
 :root {
-    --bg-primary: #1A1A1B;
-    --bg-secondary: #272729;
-    --bg-tertiary: #333335;
-    --bg-elevated: #2A2A2C;
-    --text-primary: #D7DADC;
-    --text-secondary: #818384;
-    --text-muted: #6A6A6B;
-    --border: #343536;
-    --border-light: #3A3A3C;
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F6F7F8;
+    --bg-tertiary: #EDEFF1;
+    --bg-elevated: #FFFFFF;
+    --text-primary: #1A1A1B;
+    --text-secondary: #576F76;
+    --text-muted: #878A8C;
+    --border: #E0E0E0;
+    --border-light: #EAEAEA;
     --accent: #FF4500;
-    --accent-hover: #FF5722;
-    --accent-light: rgba(255, 69, 0, 0.12);
+    --accent-hover: #E03D00;
+    --accent-light: rgba(255, 69, 0, 0.08);
     --linkedin: #0A66C2;
-    --linkedin-hover: #0077B5;
-    --linkedin-light: rgba(10, 102, 194, 0.12);
+    --linkedin-hover: #004182;
+    --linkedin-light: rgba(10, 102, 194, 0.08);
     --success: #46D160;
     --danger: #FF585B;
-    --danger-light: rgba(255, 88, 91, 0.12);
+    --danger-light: rgba(255, 88, 91, 0.08);
     --radius: 8px;
     --radius-lg: 12px;
     --radius-pill: 20px;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, .4);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, .06);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, .1);
     --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
     --transition: .2s ease;
@@ -57,7 +57,7 @@ body {
 
 /* ── Header ── */
 .header {
-    background: linear-gradient(135deg, #1a1a1b 0%, #2d1b0e 100%);
+    background: linear-gradient(135deg, #FFF5F0 0%, #FFF0E8 100%);
     padding: 14px 16px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -384,6 +384,7 @@ body {
     color: var(--text-primary);
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     word-break: break-word;

@@ -186,6 +186,7 @@ function createActionButton(label, icon, accentColor) {
     font-size:12px; font-weight:700; cursor:pointer; background:transparent;
     color:var(--color-tone-2,#878A8C); transition:background .15s,color .15s,transform .1s;
     user-select:none; outline:none; vertical-align:middle; flex-shrink:0;
+    position:relative; z-index:10;
   `;
 
   btn.innerHTML = `${icon}<span>${escapeHtml(label)}</span>`;
@@ -387,21 +388,60 @@ async function handleGenerateLI(e, btn, postData) {
 // ============================================================================
 
 function findActionBar(postElement) {
+  // Strategy 1: find a Share button in the post
   for (const sel of SELECTORS.shareButtonSelectors) {
     const shareBtn = postElement.querySelector(sel);
     if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
   }
+  // Strategy 2: check shadowRoot
   if (postElement.shadowRoot) {
     for (const sel of SELECTORS.shareButtonSelectors) {
       const shareBtn = postElement.shadowRoot.querySelector(sel);
       if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
     }
   }
+  // Strategy 3: generic button text match
   const allBtns = postElement.querySelectorAll('button');
   for (const b of allBtns) {
     if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
       return { container: b.parentElement, shareButton: b };
     }
+  }
+  // Strategy 4: find [data-testid="action-row"] (single post pages)
+  const actionRow = postElement.querySelector('[data-testid="action-row"]');
+  if (actionRow) {
+    // Try to find share button within the action row
+    for (const sel of SELECTORS.shareButtonSelectors) {
+      const shareBtn = actionRow.querySelector(sel);
+      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
+    }
+    const arBtns = actionRow.querySelectorAll('button');
+    for (const b of arBtns) {
+      if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
+        return { container: b.parentElement, shareButton: b };
+      }
+    }
+    // If no share button found in action-row, append to the row itself
+    // Use the last child as the anchor
+    const lastChild = actionRow.lastElementChild;
+    if (lastChild) return { container: actionRow, shareButton: lastChild };
+    return { container: actionRow, shareButton: null };
+  }
+  // Strategy 5: search entire page for the action-row (in case postElement doesn't contain it)
+  const pageActionRow = document.querySelector('[data-testid="action-row"]');
+  if (pageActionRow && !pageActionRow.querySelector('.reddjson-action-btn')) {
+    for (const sel of SELECTORS.shareButtonSelectors) {
+      const shareBtn = pageActionRow.querySelector(sel);
+      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
+    }
+    const arBtns = pageActionRow.querySelectorAll('button');
+    for (const b of arBtns) {
+      if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
+        return { container: b.parentElement, shareButton: b };
+      }
+    }
+    const lastChild = pageActionRow.lastElementChild;
+    if (lastChild) return { container: pageActionRow, shareButton: lastChild };
   }
   return null;
 }
@@ -448,11 +488,15 @@ function injectButtonsToNewRedditPost(postElement) {
   // Wrap in a container to keep them together
   const wrapper = document.createElement('span');
   wrapper.className = 'reddjson-buttons-wrapper';
-  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;position:relative;z-index:10;';
   wrapper.appendChild(jsonBtn);
   wrapper.appendChild(liBtn);
 
-  actionBar.shareButton.after(wrapper);
+  if (actionBar.shareButton) {
+    actionBar.shareButton.after(wrapper);
+  } else {
+    actionBar.container.appendChild(wrapper);
+  }
 
   // Mark as processed
   postElement.setAttribute(CONFIG.markerAttr, 'true');
@@ -512,14 +556,101 @@ function processAllPosts() {
         if (!p.hasAttribute(CONFIG.markerAttr)) injectButtonsToOldRedditPost(p);
       });
     } else {
+      // Feed posts
       document.querySelectorAll(SELECTORS.shredditPost).forEach(p => {
         if (!p.hasAttribute(CONFIG.markerAttr)) injectButtonsToNewRedditPost(p);
       });
+
+      // Single post page — also check for action-row without a parent shreddit-post
+      // On individual post pages, the shreddit-post may be deeply nested
+      // Also handle the case where action-row exists but has no buttons yet
+      const isSinglePostPage = /\/comments\//.test(window.location.pathname);
+      if (isSinglePostPage) {
+        const actionRows = document.querySelectorAll('[data-testid="action-row"]');
+        actionRows.forEach(row => {
+          if (row.querySelector('.reddjson-action-btn')) return; // already injected
+
+          // Walk up to find the closest shreddit-post
+          let postEl = row.closest('shreddit-post');
+          if (!postEl) {
+            // On single post pages, there might not be a shreddit-post wrapper
+            // Use the action-row's parent or create a virtual post reference
+            postEl = row.closest('[data-testid="post-container"]') || row.closest('article') || row.parentElement;
+          }
+          if (postEl && !postEl.hasAttribute(CONFIG.markerAttr)) {
+            injectButtonsToNewRedditPost(postEl);
+          } else if (!row.querySelector('.reddjson-action-btn')) {
+            // Last resort: extract post data from the URL and inject directly
+            injectButtonsToActionRow(row);
+          }
+        });
+      }
     }
   } catch (e) {
     console.error('[ReddJSON] Processing error:', e);
   } finally {
     isProcessing = false;
+  }
+}
+
+/**
+ * Direct injection into an action-row on single post pages
+ * when no parent shreddit-post element is found
+ */
+function injectButtonsToActionRow(actionRow) {
+  if (actionRow.querySelector('.reddjson-action-btn')) return;
+
+  // Extract post data from URL
+  const urlMatch = window.location.pathname.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
+  if (!urlMatch) return;
+
+  const subreddit = urlMatch[1];
+  const postId = urlMatch[2];
+  const permalink = window.location.pathname;
+
+  // Get title from page
+  let title = '';
+  const titleEl = document.querySelector('h1,[slot="title"],[data-testid="post-title"]');
+  if (titleEl) title = titleEl.textContent.trim();
+  if (!title) title = document.title.replace(/ : .*$/, '').replace(/ - Reddit$/, '');
+
+  const postData = { permalink, postId, title, subreddit };
+
+  // Create buttons
+  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+
+  const liBtn = createActionButton('LI Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+
+  const wrapper = document.createElement('span');
+  wrapper.className = 'reddjson-buttons-wrapper';
+  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;position:relative;z-index:10;';
+  wrapper.appendChild(jsonBtn);
+  wrapper.appendChild(liBtn);
+
+  // Find share button to insert after, or append to end
+  let inserted = false;
+  for (const sel of SELECTORS.shareButtonSelectors) {
+    const shareBtn = actionRow.querySelector(sel);
+    if (shareBtn) {
+      shareBtn.parentElement?.insertBefore(wrapper, shareBtn.nextSibling) || shareBtn.after(wrapper);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) {
+    const arBtns = actionRow.querySelectorAll('button');
+    for (const b of arBtns) {
+      if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
+        b.after(wrapper);
+        inserted = true;
+        break;
+      }
+    }
+  }
+  if (!inserted) {
+    actionRow.appendChild(wrapper);
   }
 }
 
@@ -537,7 +668,8 @@ function startObserver() {
         if (n.nodeType !== 1) continue;
         const tag = n.tagName?.toLowerCase();
         if (tag === 'shreddit-post' || n.classList?.contains('thing') ||
-          n.querySelector?.(SELECTORS.shredditPost) || n.querySelector?.(SELECTORS.oldRedditThing)) {
+          n.querySelector?.(SELECTORS.shredditPost) || n.querySelector?.(SELECTORS.oldRedditThing) ||
+          n.matches?.('[data-testid="action-row"]') || n.querySelector?.('[data-testid="action-row"]')) {
           shouldRun = true;
           break;
         }
