@@ -1,7 +1,7 @@
 /**
  * ReddJSON Content Script v2.0
  * ═══════════════════════════════════════════════════════════════════
- * Injects "JSON" + "LI Post" buttons into Reddit action bars.
+ * Injects "JSON" + "Post" buttons into Reddit action bars.
  * 
  * Duplicate prevention:
  *   1. data-reddjson-added attribute on post elements
@@ -482,7 +482,7 @@ function injectButtonsToNewRedditPost(postElement) {
   jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
 
   // Create LinkedIn Post button
-  const liBtn = createActionButton('LI Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
 
   // Wrap in a container to keep them together
@@ -528,7 +528,7 @@ function injectButtonsToOldRedditPost(postElement) {
   jsonBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
   jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
 
-  const liBtn = createActionButton('LI Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
   liBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
 
@@ -620,7 +620,7 @@ function injectButtonsToActionRow(actionRow) {
   const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
   jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
 
-  const liBtn = createActionButton('LI Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
 
   const wrapper = document.createElement('span');
