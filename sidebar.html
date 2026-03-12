@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReddJSON Sidebar</title>
+    <link rel="stylesheet" href="sidebar.css">
+</head>
+
+<body>
+    <div class="app">
+
+        <!-- ═══════════════ Header ═══════════════ -->
+        <header class="header">
+            <div class="header-brand">
+                <img src="reddjosn.svg" alt="ReddJSON" class="logo" width="32" height="32">
+                <div class="brand-text">
+                    <h1>ReddJSON</h1>
+                    <span class="tagline">Reddit → LinkedIn AI</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ═══════════════ Tabs ═══════════════ -->
+        <nav class="tabs" role="tablist">
+            <button class="tab active" data-tab="history" role="tab" aria-selected="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v6l4 2" />
+                </svg>
+                History
+            </button>
+            <button class="tab" data-tab="ai-posts" role="tab" aria-selected="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
+                    <rect x="2" y="9" width="4" height="12" />
+                    <circle cx="4" cy="4" r="2" />
+                </svg>
+                AI Posts
+            </button>
+            <button class="tab" data-tab="settings" role="tab" aria-selected="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+                </svg>
+                Settings
+            </button>
+        </nav>
+
+        <!-- ═══════════════ Tab: History ═══════════════ -->
+        <div class="tab-content active" id="panel-history">
+            <div class="panel-toolbar">
+                <input type="text" id="history-search" class="search-input" placeholder="Search posts…"
+                    autocomplete="off">
+                <button class="btn-icon" id="history-clear" title="Clear all history">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                </button>
+            </div>
+            <div id="history-stats" class="stats-bar"></div>
+            <div id="history-list" class="entries-list"></div>
+            <div id="history-empty" class="empty-state" style="display:none">
+                <div class="empty-icon">📋</div>
+                <p>No JSON copies yet</p>
+                <span>Click the JSON button on any Reddit post</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════ Tab: AI Posts ═══════════════ -->
+        <div class="tab-content" id="panel-ai-posts">
+            <div class="panel-toolbar">
+                <input type="text" id="ai-search" class="search-input" placeholder="Search AI posts…"
+                    autocomplete="off">
+                <button class="btn-icon" id="ai-clear" title="Clear all AI posts">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                </button>
+            </div>
+            <div id="ai-posts-list" class="entries-list"></div>
+            <div id="ai-posts-empty" class="empty-state" style="display:none">
+                <div class="empty-icon">🚀</div>
+                <p>No AI posts yet</p>
+                <span>Click "LI Post" on any Reddit post to generate</span>
+            </div>
+        </div>
+
+        <!-- ═══════════════ Tab: Settings ═══════════════ -->
+        <div class="tab-content" id="panel-settings">
+            <div class="settings-scroll">
+
+                <!-- ── Providers ── -->
+                <section class="settings-section">
+                    <h2 class="section-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                            <path d="M2 17l10 5 10-5" />
+                            <path d="M2 12l10 5 10-5" />
+                        </svg>
+                        AI Providers
+                    </h2>
+
+                    <!-- OpenRouter -->
+                    <div class="provider-card" data-provider="openrouter">
+                        <div class="provider-header">
+                            <span class="provider-name">OpenRouter</span>
+                            <span class="provider-status" id="openrouter-status">Not configured</span>
+                        </div>
+                        <div class="input-group">
+                            <label>API Key</label>
+                            <div class="input-with-btn">
+                                <input type="password" id="openrouter-key" class="text-input" placeholder="sk-or-v1-…"
+                                    autocomplete="off">
+                                <button class="btn-sm" id="openrouter-save">Save & Fetch</button>
+                            </div>
+                        </div>
+                        <div id="openrouter-models-area" class="models-area" style="display:none">
+                            <div class="models-toolbar">
+                                <input type="text" id="openrouter-model-search" class="search-input search-sm"
+                                    placeholder="Search models…">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="openrouter-free-filter"> Free only
+                                </label>
+                            </div>
+                            <div id="openrouter-models-list" class="models-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Groq -->
+                    <div class="provider-card" data-provider="groq">
+                        <div class="provider-header">
+                            <span class="provider-name">Groq</span>
+                            <span class="provider-status" id="groq-status">Not configured</span>
+                        </div>
+                        <div class="input-group">
+                            <label>API Key</label>
+                            <div class="input-with-btn">
+                                <input type="password" id="groq-key" class="text-input" placeholder="gsk_…"
+                                    autocomplete="off">
+                                <button class="btn-sm" id="groq-save">Save & Fetch</button>
+                            </div>
+                        </div>
+                        <div id="groq-models-area" class="models-area" style="display:none">
+                            <div class="models-toolbar">
+                                <input type="text" id="groq-model-search" class="search-input search-sm"
+                                    placeholder="Search models…">
+                            </div>
+                            <div id="groq-models-list" class="models-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Default Selection -->
+                    <div class="default-selection">
+                        <h3>Default Provider & Model</h3>
+                        <div class="input-group">
+                            <label>Provider</label>
+                            <select id="default-provider" class="select-input">
+                                <option value="">— Select —</option>
+                                <option value="openrouter">OpenRouter</option>
+                                <option value="groq">Groq</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Model</label>
+                            <select id="default-model" class="select-input">
+                                <option value="">— Select provider first —</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" id="save-defaults">Save Defaults</button>
+                    </div>
+                </section>
+
+                <!-- ── System Prompts ── -->
+                <section class="settings-section">
+                    <h2 class="section-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <path d="M14 2v6h6" />
+                        </svg>
+                        System Prompts
+                    </h2>
+                    <div id="prompts-list" class="prompts-list"></div>
+                    <button class="btn-outline" id="add-prompt">+ Add New Prompt</button>
+                </section>
+
+            </div>
+        </div>
+
+        <!-- ═══════════════ JSON Viewer Modal ═══════════════ -->
+        <div class="modal-overlay" id="json-modal" style="display:none">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="modal-title">JSON Viewer</h3>
+                    <button class="btn-icon modal-close" id="modal-close">✕</button>
+                </div>
+                <pre class="modal-json" id="modal-json-content"></pre>
+                <div class="modal-actions">
+                    <button class="btn-primary" id="modal-copy">Copy JSON</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ Confirm Dialog ═══════════════ -->
+        <div class="modal-overlay" id="confirm-modal" style="display:none">
+            <div class="modal modal-sm">
+                <p id="confirm-message">Are you sure?</p>
+                <div class="modal-actions">
+                    <button class="btn-outline" id="confirm-cancel">Cancel</button>
+                    <button class="btn-danger" id="confirm-ok">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ Prompt Editor Modal ═══════════════ -->
+        <div class="modal-overlay" id="prompt-modal" style="display:none">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <h3 id="prompt-modal-title">Edit Prompt</h3>
+                    <button class="btn-icon modal-close" id="prompt-modal-close">✕</button>
+                </div>
+                <div class="input-group">
+                    <label>Prompt Name</label>
+                    <input type="text" id="prompt-name-input" class="text-input" placeholder="My LinkedIn Prompt">
+                </div>
+                <div class="input-group">
+                    <label>System Prompt</label>
+                    <textarea id="prompt-text-input" class="textarea-input" rows="12"
+                        placeholder="Enter your system prompt…"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-outline" id="prompt-modal-cancel">Cancel</button>
+                    <button class="btn-primary" id="prompt-modal-save">Save</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="sidebar.js"></script>
+</body>
+
+</html>

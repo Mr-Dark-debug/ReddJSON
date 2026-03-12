@@ -1,25 +1,21 @@
 /**
- * ReddJSON Content Script
+ * ReddJSON Content Script v2.0
  * ═══════════════════════════════════════════════════════════════════
- * Injects "JSON" copy buttons into Reddit post ACTION BARS and handles
- * all user interactions on the page (click → fetch → copy → toast).
+ * Injects "JSON" + "LI Post" buttons into Reddit action bars.
+ * 
+ * Duplicate prevention:
+ *   1. data-reddjson-added attribute on post elements
+ *   2. Global Set<string> of processed post IDs
+ *   3. Debounced MutationObserver
  *
- * Supports:
- *   • New Reddit (www.reddit.com)  — <shreddit-post> custom elements
- *   • Old Reddit (old.reddit.com)  — .thing.link elements
- *   • Single post pages           — both layouts
- *
- * Uses MutationObserver for infinite scroll / SPA navigation.
- *
- * @fileoverview Content script for injection + observation + messaging
- * @author ReddJSON Team
- * @version 1.1.0
+ * @version 2.0.0
  */
 
 // ============================================================================
-// ICON SVG (reddjosn.svg inline — the official ReddJSON mascot)
+// ICON SVGs
 // ============================================================================
-const REDDJSON_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="18" height="18">
+
+const REDDJSON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="18" height="18">
   <g transform="translate(0, 5)">
     <path d="M 100 60 L 100 20 L 130 20" stroke="currentColor" stroke-width="5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
     <circle cx="38" cy="75" r="14" fill="white" stroke="currentColor" stroke-width="5"/>
@@ -39,38 +35,30 @@ const REDDJSON_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
   </g>
 </svg>`;
 
+const LINKEDIN_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/>
+  <rect x="2" y="9" width="4" height="12"/>
+  <circle cx="4" cy="4" r="2"/>
+</svg>`;
+
 // ============================================================================
-// SELECTORS — UPDATE IF REDDIT CHANGES UI
+// SELECTORS
 // ============================================================================
 
 const SELECTORS = {
-  // ── New Reddit (shreddit-post custom element) — PRIMARY ──
   shredditPost: 'shreddit-post',
-
-  // ── New Reddit post container fallback ──
   postContainer: '[data-testid="post-container"]',
-
-  // ── Old Reddit post container ──
   oldRedditThing: '.thing.link',
-
-  // ── Share button selectors to find the bottom action bar ──  
-  // The JSON button goes NEXT TO the Share button in the action bar
   shareButtonSelectors: [
     'shreddit-post-share-button',
     'button[aria-label="Share"]',
     'faceplate-tracker[source="share"]',
     'button[data-click-id="share"]',
   ],
-
-  // ── Old Reddit toolbar ──
   oldRedditToolbar: '.flat-list.buttons',
-
-  // ── Post attributes ──
   permalinkAttr: 'permalink',
   dataPermalink: 'data-permalink',
   dataFullname: 'data-fullname',
-
-  // ── Feed containers for MutationObserver ──
   feedContainers: [
     'shreddit-feed',
     '[data-testid="main-content"]',
@@ -82,45 +70,49 @@ const SELECTORS = {
 };
 
 // ============================================================================
-// CONFIGURATION
+// CONFIG
 // ============================================================================
 
 const CONFIG = {
-  buttonLabel: 'JSON',
-  toastDuration: 2000,
-  observerDebounce: 150,
+  toastDuration: 2500,
+  observerDebounce: 200,
   redditOrange: '#FF4500',
-  successGreen: '#46D160',
-  errorRed: '#FF585B',
-  markerAttribute: 'data-reddjson-added'
+  linkedinBlue: '#0A66C2',
+  markerAttr: 'data-reddjson-added'
 };
 
 // ============================================================================
-// STATE
+// STATE — Global Set prevents duplicates across re-renders
 // ============================================================================
 
+const processedPostIds = new Set();
 let isProcessing = false;
 
 // ============================================================================
-// UTILITY FUNCTIONS
+// UTILITIES
 // ============================================================================
 
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
+function debounce(fn, wait) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
 }
 
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function getPostUniqueKey(postElement) {
+  return postElement.getAttribute('id') ||
+    postElement.getAttribute(SELECTORS.dataFullname) ||
+    postElement.getAttribute(SELECTORS.permalinkAttr) ||
+    postElement.getAttribute(SELECTORS.dataPermalink) ||
+    null;
 }
 
 // ============================================================================
-// TOAST NOTIFICATIONS
+// TOAST
 // ============================================================================
 
 function showToast(message, type = 'info', nearElement = null) {
@@ -129,50 +121,34 @@ function showToast(message, type = 'info', nearElement = null) {
   const toast = document.createElement('div');
   toast.className = `reddjson-toast reddjson-toast--${type}`;
   toast.setAttribute('role', 'alert');
-  toast.setAttribute('aria-live', 'polite');
 
   const colors = {
-    success: { bg: '#46D160', text: '#fff' },
-    error: { bg: '#FF585B', text: '#fff' },
-    info: { bg: '#FF4500', text: '#fff' },
+    success: '#46D160', error: '#FF585B', info: '#FF4500', linkedin: '#0A66C2'
   };
-  const c = colors[type] || colors.info;
+  const bg = colors[type] || colors.info;
 
   const icons = {
-    success: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>',
-    error: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
-    info: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+    success: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>',
+    error: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+    linkedin: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>',
   };
 
   toast.style.cssText = `
-    position: fixed;
-    z-index: 2147483647;
-    padding: 10px 18px;
-    border-radius: 24px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    color: ${c.text};
-    background: ${c.bg};
-    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-    opacity: 0;
-    transform: translateY(-8px);
-    transition: opacity 0.25s ease, transform 0.25s ease;
-    pointer-events: none;
-    max-width: 320px;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
+    position:fixed; z-index:2147483647; padding:10px 18px; border-radius:24px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:13px; font-weight:600; color:#fff; background:${bg};
+    box-shadow:0 6px 20px rgba(0,0,0,.2); opacity:0; transform:translateY(-8px);
+    transition:opacity .25s,transform .25s; pointer-events:none;
+    max-width:360px; display:flex; align-items:center; gap:8px; white-space:nowrap;
   `;
 
   toast.innerHTML = `${icons[type] || ''}<span>${escapeHtml(message)}</span>`;
 
   if (nearElement) {
-    const rect = nearElement.getBoundingClientRect();
-    toast.style.top = `${Math.max(8, rect.top - 45)}px`;
-    toast.style.left = `${rect.left + (rect.width / 2)}px`;
+    const r = nearElement.getBoundingClientRect();
+    toast.style.top = `${Math.max(8, r.top - 45)}px`;
+    toast.style.left = `${r.left + r.width / 2}px`;
     toast.style.transform = 'translateX(-50%) translateY(-8px)';
   } else {
     toast.style.top = '20px';
@@ -181,19 +157,13 @@ function showToast(message, type = 'info', nearElement = null) {
   }
 
   document.body.appendChild(toast);
-
   requestAnimationFrame(() => {
     toast.style.opacity = '1';
-    toast.style.transform = nearElement
-      ? 'translateX(-50%) translateY(0)'
-      : 'translateX(-50%) translateY(0)';
+    toast.style.transform = nearElement ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(0)';
   });
 
   setTimeout(() => {
     toast.style.opacity = '0';
-    toast.style.transform = nearElement
-      ? 'translateX(-50%) translateY(-8px)'
-      : 'translateX(-50%) translateY(-8px)';
     setTimeout(() => toast.remove(), 300);
   }, CONFIG.toastDuration);
 }
@@ -202,74 +172,43 @@ function showToast(message, type = 'info', nearElement = null) {
 // BUTTON CREATION
 // ============================================================================
 
-/**
- * Creates the styled JSON copy button with the official ReddJSON SVG icon.
- * Styled to match Reddit's native action bar buttons.
- */
-function createJsonButton() {
-  const button = document.createElement('button');
-  button.className = 'reddjson-button';
-  button.type = 'button';
-  button.setAttribute('aria-label', 'Copy post JSON to clipboard');
-  button.title = 'Copy post JSON to clipboard';
+function createActionButton(label, icon, accentColor) {
+  const btn = document.createElement('button');
+  btn.className = 'reddjson-action-btn';
+  btn.type = 'button';
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
 
-  // Style to match Reddit's native action bar buttons
-  button.style.cssText = `
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 0 8px;
-    height: 32px;
-    border: none;
-    border-radius: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1;
-    cursor: pointer;
-    background: transparent;
-    color: var(--color-tone-2, #878A8C);
-    transition: background 0.15s, color 0.15s, transform 0.1s;
-    user-select: none;
-    -webkit-user-select: none;
-    outline: none;
-    vertical-align: middle;
-    position: relative;
-    flex-shrink: 0;
+  btn.style.cssText = `
+    display:inline-flex; align-items:center; gap:6px; padding:0 8px; height:32px;
+    border:none; border-radius:20px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:12px; font-weight:700; cursor:pointer; background:transparent;
+    color:var(--color-tone-2,#878A8C); transition:background .15s,color .15s,transform .1s;
+    user-select:none; outline:none; vertical-align:middle; flex-shrink:0;
   `;
 
-  // Use the official ReddJSON SVG icon
-  button.innerHTML = `${REDDJSON_SVG_ICON}<span>${CONFIG.buttonLabel}</span>`;
+  btn.innerHTML = `${icon}<span>${escapeHtml(label)}</span>`;
 
-  // Hover effects matching Reddit's native style
-  button.addEventListener('mouseenter', () => {
-    button.style.background = 'rgba(255, 69, 0, 0.08)';
-    button.style.color = CONFIG.redditOrange;
+  btn.addEventListener('mouseenter', () => {
+    btn.style.background = `${accentColor}14`;
+    btn.style.color = accentColor;
   });
-  button.addEventListener('mouseleave', () => {
-    button.style.background = 'transparent';
-    button.style.color = 'var(--color-tone-2, #878A8C)';
+  btn.addEventListener('mouseleave', () => {
+    btn.style.background = 'transparent';
+    btn.style.color = 'var(--color-tone-2,#878A8C)';
   });
-  button.addEventListener('mousedown', () => {
-    button.style.transform = 'scale(0.94)';
-  });
-  button.addEventListener('mouseup', () => {
-    button.style.transform = 'scale(1)';
+  btn.addEventListener('mousedown', () => { btn.style.transform = 'scale(0.94)'; });
+  btn.addEventListener('mouseup', () => { btn.style.transform = 'scale(1)'; });
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); }
   });
 
-  button.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      button.click();
-    }
-  });
-
-  return button;
+  return btn;
 }
 
 function createSpinner() {
-  return `<svg class="reddjson-spinner" width="16" height="16" viewBox="0 0 24 24" style="animation: reddjson-spin 0.8s linear infinite;">
+  return `<svg width="16" height="16" viewBox="0 0 24 24" style="animation:reddjson-spin .8s linear infinite">
     <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31.4 31.4" stroke-linecap="round"/>
   </svg>`;
 }
@@ -278,266 +217,285 @@ function createSpinner() {
 // POST DATA EXTRACTION
 // ============================================================================
 
-function extractNewRedditPostData(postElement) {
+function extractNewRedditPostData(el) {
   try {
-    let permalink = postElement.getAttribute(SELECTORS.permalinkAttr)
-      || postElement.getAttribute(SELECTORS.dataPermalink);
-
+    let permalink = el.getAttribute(SELECTORS.permalinkAttr) || el.getAttribute(SELECTORS.dataPermalink);
     if (!permalink) {
-      const link = postElement.querySelector('a[data-click-id="body"], a[href*="/comments/"]');
+      const link = el.querySelector('a[data-click-id="body"],a[href*="/comments/"]');
       if (link) permalink = link.getAttribute('href');
     }
     if (!permalink) {
-      // Try the full-post-link slot
-      const fullLink = postElement.querySelector('a[slot="full-post-link"]');
+      const fullLink = el.querySelector('a[slot="full-post-link"]');
       if (fullLink) permalink = fullLink.getAttribute('href');
-    }
-    if (!permalink) {
-      console.warn('[ReddJSON] Could not find permalink for post element');
-      return null;
-    }
-
-    let postId = postElement.getAttribute('id');
-    if (!postId) {
-      const fullname = postElement.getAttribute(SELECTORS.dataFullname);
-      postId = fullname ? fullname.replace('t3_', '') : null;
-    }
-    if (!postId && permalink) {
-      const match = permalink.match(/comments\/([a-zA-Z0-9]+)/);
-      if (match) postId = match[1];
-    }
-
-    let title = '';
-    const titleEl = postElement.querySelector(
-      'h1, [slot="title"], a[data-click-id="body"] h3, a.title, [data-testid="post-title"]'
-    );
-    if (titleEl) title = titleEl.textContent.trim();
-    // Fallback: try post-title attribute
-    if (!title) title = postElement.getAttribute('post-title') || '';
-
-    let subreddit = '';
-    subreddit = postElement.getAttribute('subreddit-prefixed-name')?.replace(/^r\//, '') || '';
-    if (!subreddit) {
-      const subEl = postElement.querySelector('[slot="subreddit-name"], a[href^="/r/"]');
-      if (subEl) {
-        const href = subEl.getAttribute('href');
-        const match = href?.match(/\/r\/([^/]+)/);
-        subreddit = match ? match[1] : subEl.textContent.trim().replace(/^r\//, '');
-      }
-    }
-
-    return { permalink, postId: postId || 'unknown', title, subreddit };
-  } catch (error) {
-    console.error('[ReddJSON] Error extracting new Reddit post data:', error);
-    return null;
-  }
-}
-
-function extractOldRedditPostData(postElement) {
-  try {
-    let permalink = postElement.getAttribute('data-permalink')
-      || postElement.getAttribute('data-url');
-
-    if (!permalink) {
-      const commentsLink = postElement.querySelector('a.comments, a.bylink, a[href*="/comments/"]');
-      if (commentsLink) permalink = commentsLink.getAttribute('href');
     }
     if (!permalink) return null;
 
-    let postId = postElement.getAttribute('data-fullname');
-    if (postId) {
-      postId = postId.replace('t3_', '');
-    } else {
-      const classMatch = postElement.className.match(/id-t3[-_]([a-zA-Z0-9]+)/);
-      if (classMatch) postId = classMatch[1];
+    let postId = el.getAttribute('id');
+    if (!postId) {
+      const fn = el.getAttribute(SELECTORS.dataFullname);
+      postId = fn ? fn.replace('t3_', '') : null;
+    }
+    if (!postId && permalink) {
+      const m = permalink.match(/comments\/([a-zA-Z0-9]+)/);
+      if (m) postId = m[1];
     }
 
     let title = '';
-    const titleEl = postElement.querySelector('a.title, .title a');
+    const titleEl = el.querySelector('h1,[slot="title"],a[data-click-id="body"] h3,a.title,[data-testid="post-title"]');
     if (titleEl) title = titleEl.textContent.trim();
+    if (!title) title = el.getAttribute('post-title') || '';
 
-    let subreddit = '';
-    const subLink = postElement.querySelector('a.subreddit, a[href^="/r/"]');
-    if (subLink) {
-      const match = subLink.getAttribute('href')?.match(/\/r\/([^/]+)/);
-      if (match) subreddit = match[1];
+    let subreddit = el.getAttribute('subreddit-prefixed-name')?.replace(/^r\//, '') || '';
+    if (!subreddit) {
+      const subEl = el.querySelector('[slot="subreddit-name"],a[href^="/r/"]');
+      if (subEl) {
+        const m = subEl.getAttribute('href')?.match(/\/r\/([^/]+)/);
+        subreddit = m ? m[1] : subEl.textContent.trim().replace(/^r\//, '');
+      }
     }
 
     return { permalink, postId: postId || 'unknown', title, subreddit };
-  } catch (error) {
-    console.error('[ReddJSON] Error extracting old Reddit post data:', error);
+  } catch (e) {
+    console.error('[ReddJSON] Extract error:', e);
     return null;
   }
 }
 
-function extractPostData(postElement, type = 'new') {
-  return type === 'old'
-    ? extractOldRedditPostData(postElement)
-    : extractNewRedditPostData(postElement);
+function extractOldRedditPostData(el) {
+  try {
+    let permalink = el.getAttribute('data-permalink') || el.getAttribute('data-url');
+    if (!permalink) {
+      const link = el.querySelector('a.comments,a.bylink,a[href*="/comments/"]');
+      if (link) permalink = link.getAttribute('href');
+    }
+    if (!permalink) return null;
+
+    let postId = el.getAttribute('data-fullname');
+    if (postId) postId = postId.replace('t3_', '');
+    else {
+      const m = el.className.match(/id-t3[-_]([a-zA-Z0-9]+)/);
+      if (m) postId = m[1];
+    }
+
+    let title = '';
+    const titleEl = el.querySelector('a.title,.title a');
+    if (titleEl) title = titleEl.textContent.trim();
+
+    let subreddit = '';
+    const subLink = el.querySelector('a.subreddit,a[href^="/r/"]');
+    if (subLink) {
+      const m = subLink.getAttribute('href')?.match(/\/r\/([^/]+)/);
+      if (m) subreddit = m[1];
+    }
+
+    return { permalink, postId: postId || 'unknown', title, subreddit };
+  } catch (e) {
+    return null;
+  }
 }
 
 // ============================================================================
-// JSON COPY HANDLER
+// CLICK HANDLERS
 // ============================================================================
 
-async function handleJsonCopy(event, button, postData) {
-  event.preventDefault();
-  event.stopPropagation();
+async function handleJsonCopy(e, btn, postData) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (btn.disabled) return;
 
-  if (button.disabled) return;
-
-  const originalContent = button.innerHTML;
-  button.innerHTML = createSpinner();
-  button.disabled = true;
-  button.style.cursor = 'wait';
+  const orig = btn.innerHTML;
+  btn.innerHTML = createSpinner();
+  btn.disabled = true;
+  btn.style.cursor = 'wait';
 
   try {
-    const response = await chrome.runtime.sendMessage({
-      action: 'fetchJSON',
-      permalink: postData.permalink
-    });
+    const resp = await chrome.runtime.sendMessage({ action: 'fetchJSON', permalink: postData.permalink });
+    if (!resp?.success) { showToast(resp?.error || 'Fetch failed', 'error', btn); return; }
 
-    if (!response || !response.success) {
-      showToast(response?.error || 'Failed to fetch JSON', 'error', button);
-      return;
-    }
-
-    const prettyJson = JSON.stringify(response.data, null, 2);
-    await navigator.clipboard.writeText(prettyJson);
-    showToast('JSON copied!', 'success', button);
+    const pretty = JSON.stringify(resp.data, null, 2);
+    await navigator.clipboard.writeText(pretty);
+    showToast('JSON copied!', 'success', btn);
 
     chrome.runtime.sendMessage({
       action: 'addToHistory',
-      entry: {
-        permalink: postData.permalink,
-        title: postData.title || 'Untitled Post',
-        subreddit: postData.subreddit || 'unknown',
-        postId: postData.postId || 'unknown',
-        jsonData: response.data
-      }
-    }).catch(err => console.warn('[ReddJSON] History storage warning:', err));
+      entry: { permalink: postData.permalink, title: postData.title, subreddit: postData.subreddit, postId: postData.postId, jsonData: resp.data }
+    }).catch(() => { });
 
-  } catch (error) {
-    console.error('[ReddJSON] Copy error:', error);
-
-    if (error.name === 'NotAllowedError') {
-      showToast('Focus this tab and try again', 'error', button);
-    } else {
-      showToast('Copy failed: ' + (error.message || 'Unknown error'), 'error', button);
-    }
+  } catch (err) {
+    if (err.name === 'NotAllowedError') showToast('Focus this tab and retry', 'error', btn);
+    else showToast('Copy failed', 'error', btn);
   } finally {
-    button.innerHTML = originalContent;
-    button.disabled = false;
-    button.style.cursor = 'pointer';
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    btn.style.cursor = 'pointer';
+  }
+}
+
+async function handleGenerateLI(e, btn, postData) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (btn.disabled) return;
+
+  const orig = btn.innerHTML;
+  btn.innerHTML = createSpinner();
+  btn.disabled = true;
+  btn.style.cursor = 'wait';
+
+  try {
+    // First check if settings have a provider configured
+    const settingsResp = await chrome.runtime.sendMessage({ action: 'getSettings' });
+    const settings = settingsResp?.settings;
+
+    if (!settings?.defaultProvider || !settings?.defaultModel) {
+      showToast('Set up an AI provider in Settings first', 'error', btn);
+      // Try to open sidebar
+      chrome.runtime.sendMessage({ action: 'openSidePanel' }).catch(() => { });
+      return;
+    }
+
+    showToast('Generating LinkedIn post…', 'linkedin', btn);
+
+    const resp = await chrome.runtime.sendMessage({
+      action: 'generateLinkedInPost',
+      permalink: postData.permalink,
+      title: postData.title,
+      subreddit: postData.subreddit,
+      postId: postData.postId
+    });
+
+    if (!resp?.success) {
+      showToast(resp?.error || 'Generation failed', 'error', btn);
+      return;
+    }
+
+    showToast('LinkedIn post ready! Check sidebar →', 'success', btn);
+
+    // Open side panel to show the result
+    chrome.runtime.sendMessage({ action: 'openSidePanel' }).catch(() => { });
+
+  } catch (err) {
+    showToast('Error: ' + (err.message || 'Unknown'), 'error', btn);
+  } finally {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    btn.style.cursor = 'pointer';
   }
 }
 
 // ============================================================================
-// BUTTON INJECTION — NEW REDDIT
+// FIND ACTION BAR
 // ============================================================================
 
-/**
- * Finds the Share button's parent action bar in a <shreddit-post>.
- * This is the BOTTOM action bar containing vote, comments, award, share.
- * We inject our button right AFTER the share button so it sits next to it.
- *
- * @param {HTMLElement} postElement - The <shreddit-post> element
- * @returns {{container: HTMLElement, shareButton: HTMLElement}|null}
- */
 function findActionBar(postElement) {
-  // Strategy: find the Share button first, then its parent is the action bar
-  for (const selector of SELECTORS.shareButtonSelectors) {
-    // Search within the post element
-    const shareBtn = postElement.querySelector(selector);
-    if (shareBtn) {
-      return { container: shareBtn.parentElement, shareButton: shareBtn };
-    }
+  for (const sel of SELECTORS.shareButtonSelectors) {
+    const shareBtn = postElement.querySelector(sel);
+    if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
   }
-
-  // Fallback: Try shadow DOM of shreddit-post if applicable
   if (postElement.shadowRoot) {
-    for (const selector of SELECTORS.shareButtonSelectors) {
-      const shareBtn = postElement.shadowRoot.querySelector(selector);
-      if (shareBtn) {
-        return { container: shareBtn.parentElement, shareButton: shareBtn };
-      }
+    for (const sel of SELECTORS.shareButtonSelectors) {
+      const shareBtn = postElement.shadowRoot.querySelector(sel);
+      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
     }
   }
-
-  // Last fallback: search for any element containing "Share" text in the bottom area
-  const allButtons = postElement.querySelectorAll('button');
-  for (const btn of allButtons) {
-    const text = btn.textContent?.trim();
-    if (text === 'Share' || btn.getAttribute('aria-label')?.includes('Share')) {
-      return { container: btn.parentElement, shareButton: btn };
+  const allBtns = postElement.querySelectorAll('button');
+  for (const b of allBtns) {
+    if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
+      return { container: b.parentElement, shareButton: b };
     }
   }
-
   return null;
 }
 
-/**
- * Injects a JSON button into a New Reddit <shreddit-post> element.
- * Places the button in the BOTTOM action bar, right after the Share button.
- */
-function injectButtonToNewRedditPost(postElement) {
-  if (postElement.hasAttribute(CONFIG.markerAttribute)) return;
+// ============================================================================
+// BUTTON INJECTION
+// ============================================================================
 
-  const postData = extractPostData(postElement, 'new');
-  if (!postData?.permalink) return;
+function injectButtonsToNewRedditPost(postElement) {
+  // Guard 1: data attribute
+  if (postElement.hasAttribute(CONFIG.markerAttr)) return;
 
-  // Find the action bar and share button
-  const actionBar = findActionBar(postElement);
-  if (!actionBar) {
-    // If we can't find the action bar yet, the post might still be loading
-    // We'll try again on the next mutation observer pass
-    console.debug('[ReddJSON] Action bar not found for post, will retry:', postData.permalink);
+  // Guard 2: global Set
+  const uniqueKey = getPostUniqueKey(postElement);
+  if (uniqueKey && processedPostIds.has(uniqueKey)) {
+    postElement.setAttribute(CONFIG.markerAttr, 'true');
     return;
   }
 
-  const button = createJsonButton();
-  button.addEventListener('click', (e) => handleJsonCopy(e, button, postData));
+  const postData = extractNewRedditPostData(postElement);
+  if (!postData?.permalink) return;
 
-  // Insert AFTER the share button so it appears next to it
-  actionBar.shareButton.after(button);
+  const actionBar = findActionBar(postElement);
+  if (!actionBar) {
+    console.debug('[ReddJSON] Action bar not found, will retry');
+    return;
+  }
 
-  postElement.setAttribute(CONFIG.markerAttribute, 'true');
-  console.debug('[ReddJSON] ✓ Button injected for:', postData.permalink);
+  // Double-check: if buttons already exist in this action bar, skip
+  if (actionBar.container.querySelector('.reddjson-action-btn')) {
+    postElement.setAttribute(CONFIG.markerAttr, 'true');
+    if (uniqueKey) processedPostIds.add(uniqueKey);
+    return;
+  }
+
+  // Create JSON button
+  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+
+  // Create LinkedIn Post button
+  const liBtn = createActionButton('LI Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+
+  // Wrap in a container to keep them together
+  const wrapper = document.createElement('span');
+  wrapper.className = 'reddjson-buttons-wrapper';
+  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+  wrapper.appendChild(jsonBtn);
+  wrapper.appendChild(liBtn);
+
+  actionBar.shareButton.after(wrapper);
+
+  // Mark as processed
+  postElement.setAttribute(CONFIG.markerAttr, 'true');
+  if (uniqueKey) processedPostIds.add(uniqueKey);
 }
 
-/**
- * Injects a JSON button into an Old Reddit .thing element.
- */
-function injectButtonToOldRedditPost(postElement) {
-  if (postElement.hasAttribute(CONFIG.markerAttribute)) return;
+function injectButtonsToOldRedditPost(postElement) {
+  if (postElement.hasAttribute(CONFIG.markerAttr)) return;
 
-  const postData = extractPostData(postElement, 'old');
+  const uniqueKey = getPostUniqueKey(postElement);
+  if (uniqueKey && processedPostIds.has(uniqueKey)) {
+    postElement.setAttribute(CONFIG.markerAttr, 'true');
+    return;
+  }
+
+  const postData = extractOldRedditPostData(postElement);
   if (!postData?.permalink) return;
 
   const toolbar = postElement.querySelector(SELECTORS.oldRedditToolbar);
   if (!toolbar) return;
 
-  const button = createJsonButton();
+  if (toolbar.querySelector('.reddjson-action-btn')) {
+    postElement.setAttribute(CONFIG.markerAttr, 'true');
+    if (uniqueKey) processedPostIds.add(uniqueKey);
+    return;
+  }
 
-  // Adjust styling for old Reddit's flatter design
-  button.style.cssText += `
-    border: 1px solid #c6c6c6;
-    padding: 4px 8px;
-    border-radius: 3px;
-    font-size: 11px;
-    margin: 0 2px;
-    height: auto;
-  `;
+  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
+  jsonBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
 
-  button.addEventListener('click', (e) => handleJsonCopy(e, button, postData));
+  const liBtn = createActionButton('LI Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  liBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
+  liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
 
-  const listItem = document.createElement('li');
-  listItem.className = 'reddjson-old-reddit-item';
-  listItem.style.display = 'inline-block';
-  listItem.appendChild(button);
+  const li = document.createElement('li');
+  li.style.display = 'inline-block';
+  li.appendChild(jsonBtn);
+  li.appendChild(liBtn);
+  toolbar.appendChild(li);
 
-  toolbar.appendChild(listItem);
-  postElement.setAttribute(CONFIG.markerAttribute, 'true');
+  postElement.setAttribute(CONFIG.markerAttr, 'true');
+  if (uniqueKey) processedPostIds.add(uniqueKey);
 }
 
 // ============================================================================
@@ -547,34 +505,19 @@ function injectButtonToOldRedditPost(postElement) {
 function processAllPosts() {
   if (isProcessing) return;
   isProcessing = true;
-
   try {
-    const isOldReddit = window.location.hostname.includes('old.reddit.com');
-
-    if (isOldReddit) {
-      document.querySelectorAll(SELECTORS.oldRedditThing).forEach(post => {
-        if (!post.hasAttribute(CONFIG.markerAttribute)) {
-          injectButtonToOldRedditPost(post);
-        }
+    const isOld = window.location.hostname.includes('old.reddit.com');
+    if (isOld) {
+      document.querySelectorAll(SELECTORS.oldRedditThing).forEach(p => {
+        if (!p.hasAttribute(CONFIG.markerAttr)) injectButtonsToOldRedditPost(p);
       });
     } else {
-      // Process <shreddit-post> custom elements
-      document.querySelectorAll(SELECTORS.shredditPost).forEach(post => {
-        if (!post.hasAttribute(CONFIG.markerAttribute)) {
-          injectButtonToNewRedditPost(post);
-        }
-      });
-
-      // Fallback: check [data-testid="post-container"]
-      document.querySelectorAll(SELECTORS.postContainer).forEach(container => {
-        const parentPost = container.closest(SELECTORS.shredditPost);
-        if (parentPost && !parentPost.hasAttribute(CONFIG.markerAttribute)) {
-          injectButtonToNewRedditPost(parentPost);
-        }
+      document.querySelectorAll(SELECTORS.shredditPost).forEach(p => {
+        if (!p.hasAttribute(CONFIG.markerAttr)) injectButtonsToNewRedditPost(p);
       });
     }
-  } catch (error) {
-    console.error('[ReddJSON] Error processing posts:', error);
+  } catch (e) {
+    console.error('[ReddJSON] Processing error:', e);
   } finally {
     isProcessing = false;
   }
@@ -585,132 +528,74 @@ function processAllPosts() {
 // ============================================================================
 
 function startObserver() {
-  const debouncedProcess = debounce(processAllPosts, CONFIG.observerDebounce);
-
+  const dProc = debounce(processAllPosts, CONFIG.observerDebounce);
   const observer = new MutationObserver((mutations) => {
-    let shouldProcess = false;
-
-    for (const mutation of mutations) {
-      if (mutation.type !== 'childList' || mutation.addedNodes.length === 0) continue;
-
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== Node.ELEMENT_NODE) continue;
-
-        const tag = node.tagName?.toLowerCase();
-        const isPost =
-          tag === 'shreddit-post' ||
-          node.classList?.contains('thing') ||
-          node.querySelector?.(SELECTORS.shredditPost) ||
-          node.querySelector?.(SELECTORS.oldRedditThing);
-
-        if (isPost) {
-          shouldProcess = true;
+    let shouldRun = false;
+    for (const m of mutations) {
+      if (m.type !== 'childList' || !m.addedNodes.length) continue;
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        const tag = n.tagName?.toLowerCase();
+        if (tag === 'shreddit-post' || n.classList?.contains('thing') ||
+          n.querySelector?.(SELECTORS.shredditPost) || n.querySelector?.(SELECTORS.oldRedditThing)) {
+          shouldRun = true;
           break;
         }
       }
-      if (shouldProcess) break;
+      if (shouldRun) break;
     }
-
-    if (shouldProcess) {
-      debouncedProcess();
-    }
+    if (shouldRun) dProc();
   });
 
-  let observeTarget = document.body;
-  for (const selector of SELECTORS.feedContainers) {
-    const container = document.querySelector(selector);
-    if (container) {
-      observeTarget = container;
-      break;
-    }
+  let target = document.body;
+  for (const sel of SELECTORS.feedContainers) {
+    const c = document.querySelector(sel);
+    if (c) { target = c; break; }
   }
 
-  observer.observe(observeTarget, {
-    childList: true,
-    subtree: true
-  });
-
-  console.log('[ReddJSON] Observer started on:', observeTarget.tagName || 'BODY');
+  observer.observe(target, { childList: true, subtree: true });
 }
 
 // ============================================================================
-// STYLE INJECTION
+// STYLES
 // ============================================================================
 
 function injectStyles() {
-  const styleId = 'reddjson-injected-styles';
-  if (document.getElementById(styleId)) return;
-
+  if (document.getElementById('reddjson-styles-v2')) return;
   const style = document.createElement('style');
-  style.id = styleId;
+  style.id = 'reddjson-styles-v2';
   style.textContent = `
-    @keyframes reddjson-spin {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
-
-    .reddjson-button {
-      outline: none !important;
-    }
-
-    .reddjson-button:focus-visible {
-      box-shadow: 0 0 0 2px rgba(255, 69, 0, 0.5);
-    }
-
-    .reddjson-button:active {
-      transform: scale(0.94) !important;
-    }
-
-    .reddjson-old-reddit-item {
-      display: inline-block !important;
-    }
-
-    .reddjson-old-reddit-item::before {
-      display: none !important;
-    }
-
-    .reddjson-spinner {
-      animation: reddjson-spin 0.8s linear infinite;
-    }
+    @keyframes reddjson-spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+    .reddjson-action-btn { outline:none !important; }
+    .reddjson-action-btn:focus-visible { box-shadow:0 0 0 2px rgba(255,69,0,.5); }
+    .reddjson-action-btn:active { transform:scale(.94) !important; }
   `;
-
   document.head.appendChild(style);
 }
 
 // ============================================================================
-// INITIALIZATION
+// INIT
 // ============================================================================
 
 function init() {
-  console.log('[ReddJSON] Content script initializing…');
-
+  console.log('[ReddJSON] Content v2.0 initializing…');
   injectStyles();
   processAllPosts();
   startObserver();
-
-  // Retry after a short delay for posts that were still loading
   setTimeout(processAllPosts, 1000);
   setTimeout(processAllPosts, 3000);
-
-  console.log('[ReddJSON] Content script initialized ✓');
+  console.log('[ReddJSON] Content v2.0 ready ✓');
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  setTimeout(init, 150);
-}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else setTimeout(init, 150);
 
-// Handle SPA-style navigation
+// SPA navigation detection
 let lastUrl = location.href;
 new MutationObserver(() => {
-  const currentUrl = location.href;
-  if (currentUrl !== lastUrl) {
-    lastUrl = currentUrl;
-    console.log('[ReddJSON] URL changed → reprocessing…');
-    document.querySelectorAll(`[${CONFIG.markerAttribute}]`).forEach(el => {
-      el.removeAttribute(CONFIG.markerAttribute);
-    });
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    // Don't clear processedPostIds — prevents re-injection on back-navigation
     setTimeout(processAllPosts, 500);
   }
 }).observe(document, { subtree: true, childList: true });

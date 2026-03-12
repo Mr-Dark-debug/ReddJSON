@@ -1,25 +1,31 @@
 {
   "manifest_version": 3,
-  "name": "ReddJSON — Reddit Post JSON Copier",
-  "version": "1.0.0",
-  "description": "Copy Reddit post JSON with one click. Adds a native JSON button to every post for developers and data analysts.",
+  "name": "ReddJSON — Reddit to LinkedIn AI",
+  "version": "2.0.0",
+  "description": "Copy Reddit post JSON, generate LinkedIn posts with AI. Sidebar with history, AI posts, and provider settings.",
   "author": "ReddJSON Team",
   "icons": {
     "128": "reddjosn.svg"
   },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": "reddjosn.svg",
-    "default_title": "ReddJSON — View Copy History"
+    "default_title": "ReddJSON — Open Sidebar"
   },
   "permissions": [
-    "storage"
+    "storage",
+    "sidePanel",
+    "activeTab"
   ],
   "host_permissions": [
-    "*://*.reddit.com/*"
+    "*://*.reddit.com/*",
+    "https://openrouter.ai/*",
+    "https://api.groq.com/*"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidebar.html"
   },
   "content_scripts": [
     {
