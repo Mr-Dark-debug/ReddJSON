@@ -1,0 +1,48 @@
+/**
+ * ReddJSON Content Styles
+ * ═══════════════════════════════════════════════════════════════════
+ * Additional styles injected into Reddit pages via content_scripts.
+ * These supplement the inline styles applied by content.js.
+ */
+
+/* ── Button container adjustments ── */
+.reddjson-button-wrapper {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Ensure button doesn't break Reddit's layout ── */
+shreddit-post .reddjson-button {
+  flex-shrink: 0;
+}
+
+/* ── Old Reddit specific styles ── */
+.thing .reddjson-old-reddit-item {
+  margin-left: 4px;
+}
+
+/* ── Toast layer (ensure always on top of Reddit) ── */
+.reddjson-toast {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Button micro-interactions ── */
+.reddjson-button {
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease !important;
+}
+
+.reddjson-button:hover {
+  transform: translateY(-1px);
+}
+
+.reddjson-button:active {
+  transform: translateY(0) scale(0.96) !important;
+}
+
+/* ── Loading state ── */
+.reddjson-button:disabled {
+  opacity: 0.6;
+  cursor: wait !important;
+  pointer-events: none;
+}

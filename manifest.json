@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "ReddJSON — Reddit Post JSON Copier",
+  "version": "1.0.0",
+  "description": "Copy Reddit post JSON with one click. Adds a native JSON button to every post for developers and data analysts.",
+  "author": "ReddJSON Team",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_title": "ReddJSON — View Copy History"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.reddit.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.reddit.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/*",
+        "reddjosn.svg"
+      ],
+      "matches": [
+        "*://*.reddit.com/*"
+      ]
+    }
+  ]
+}
