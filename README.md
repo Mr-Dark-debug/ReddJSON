@@ -37,12 +37,19 @@
 
 ### JSON Button in Reddit Feed
 > The `{} JSON` button appears in every post's action bar, right next to Share, Save, etc. Styled to match Reddit's native UI with Reddit-orange hover effect.
+<img width="1305" height="870" alt="image" src="https://github.com/user-attachments/assets/d0ec2ea7-6e5a-4fe2-962e-faf9ac41af5c" />
 
-### Popup Copy History
-> Clean, modern popup (420×600px) with gradient header, search bar, stats counter, and scrollable history cards. Each card shows title, subreddit badge, relative time, and action buttons.
+### Sidebar Copy History
+> Clean, modern sidebar with gradient header, search bar, stats counter, and scrollable history cards. Each card shows title, subreddit badge, relative time, and action buttons.
+<img width="1913" height="927" alt="image" src="https://github.com/user-attachments/assets/579756d6-5f99-445a-a24f-35ff9050383d" />
 
 ### JSON Viewer Modal
 > Full JSON viewer with dark syntax-highlighted `<pre>` block, copy button, and backdrop blur. Displays the complete Reddit API response.
+<img width="662" height="934" alt="image" src="https://github.com/user-attachments/assets/efb868f2-5a7e-41c1-81dc-d7535534fef1" />
+
+### AI post generator 
+> Generates viral LinkedIn post directly with one click.
+<img width="1919" height="929" alt="image" src="https://github.com/user-attachments/assets/2f449d4e-f5d4-44e6-beff-b69d2ca6a412" />
 
 ### Toast Notifications
 > Floating pill-shaped toasts with icons — success (green ✓), error (red ✕), info (orange ℹ). Auto-dismiss after 2 seconds.
