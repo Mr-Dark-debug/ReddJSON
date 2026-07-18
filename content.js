@@ -1,14 +1,17 @@
 /**
- * ReddJSON Content Script v2.0
+ * ReddJSON Content Script v2.1
  * ═══════════════════════════════════════════════════════════════════
  * Injects "JSON" + "Post" buttons into Reddit action bars.
- * 
+ *
  * Duplicate prevention:
  *   1. data-reddjson-added attribute on post elements
- *   2. Global Set<string> of processed post IDs
+ *   2. Global Set<string> of processed post IDs (capped at 500)
  *   3. Debounced MutationObserver
  *
- * @version 2.0.0
+ * v2.1: JSON filter menu (post-only vs full), keyboard shortcut
+ * message handling, processedPostIds cap.
+ *
+ * @version 2.1.0
  */
 
 // ============================================================================
@@ -78,7 +81,8 @@ const CONFIG = {
   observerDebounce: 200,
   redditOrange: '#FF4500',
   linkedinBlue: '#0A66C2',
-  markerAttr: 'data-reddjson-added'
+  markerAttr: 'data-reddjson-added',
+  maxProcessedIds: 500
 };
 
 // ============================================================================
@@ -87,6 +91,15 @@ const CONFIG = {
 
 const processedPostIds = new Set();
 let isProcessing = false;
+
+function trackPostId(id) {
+  if (!id) return;
+  if (processedPostIds.size >= CONFIG.maxProcessedIds) {
+    const first = processedPostIds.values().next().value;
+    processedPostIds.delete(first);
+  }
+  processedPostIds.add(id);
+}
 
 // ============================================================================
 // UTILITIES
@@ -299,7 +312,7 @@ function extractOldRedditPostData(el) {
 // CLICK HANDLERS
 // ============================================================================
 
-async function handleJsonCopy(e, btn, postData) {
+async function handleJsonCopy(e, btn, postData, postOnly = false) {
   e.preventDefault();
   e.stopPropagation();
   if (btn.disabled) return;
@@ -310,12 +323,16 @@ async function handleJsonCopy(e, btn, postData) {
   btn.style.cursor = 'wait';
 
   try {
-    const resp = await chrome.runtime.sendMessage({ action: 'fetchJSON', permalink: postData.permalink });
+    const resp = await chrome.runtime.sendMessage({
+      action: 'fetchJSON',
+      permalink: postData.permalink,
+      postOnly
+    });
     if (!resp?.success) { showToast(resp?.error || 'Fetch failed', 'error', btn); return; }
 
     const pretty = JSON.stringify(resp.data, null, 2);
     await navigator.clipboard.writeText(pretty);
-    showToast('JSON copied!', 'success', btn);
+    showToast(postOnly ? 'Post JSON copied (no comments)!' : 'JSON copied!', 'success', btn);
 
     chrome.runtime.sendMessage({
       action: 'addToHistory',
@@ -332,7 +349,7 @@ async function handleJsonCopy(e, btn, postData) {
   }
 }
 
-async function handleGenerateLI(e, btn, postData) {
+async function handleGenerateLI(e, btn, postData, promptId = null) {
   e.preventDefault();
   e.stopPropagation();
   if (btn.disabled) return;
@@ -361,7 +378,8 @@ async function handleGenerateLI(e, btn, postData) {
       permalink: postData.permalink,
       title: postData.title,
       subreddit: postData.subreddit,
-      postId: postData.postId
+      postId: postData.postId,
+      promptId: promptId
     });
 
     if (!resp?.success) {
@@ -473,17 +491,29 @@ function injectButtonsToNewRedditPost(postElement) {
   // Double-check: if buttons already exist in this action bar, skip
   if (actionBar.container.querySelector('.reddjson-action-btn')) {
     postElement.setAttribute(CONFIG.markerAttr, 'true');
-    if (uniqueKey) processedPostIds.add(uniqueKey);
+    if (uniqueKey) trackPostId(uniqueKey);
     return;
   }
 
-  // Create JSON button
+  // Create JSON button with right-click menu for post-only option
   const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
-  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData, false));
+  jsonBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showJsonFilterMenu(e, jsonBtn, postData);
+  });
+  jsonBtn.title = 'Copy JSON (right-click for options)';
 
   // Create LinkedIn Post button
   const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+  liBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showPromptTemplateMenu(e, liBtn, postData);
+  });
+  liBtn.title = 'Generate LinkedIn post (right-click to select template)';
 
   // Wrap in a container to keep them together
   const wrapper = document.createElement('span');
@@ -500,7 +530,7 @@ function injectButtonsToNewRedditPost(postElement) {
 
   // Mark as processed
   postElement.setAttribute(CONFIG.markerAttr, 'true');
-  if (uniqueKey) processedPostIds.add(uniqueKey);
+  if (uniqueKey) trackPostId(uniqueKey);
 }
 
 function injectButtonsToOldRedditPost(postElement) {
@@ -520,17 +550,29 @@ function injectButtonsToOldRedditPost(postElement) {
 
   if (toolbar.querySelector('.reddjson-action-btn')) {
     postElement.setAttribute(CONFIG.markerAttr, 'true');
-    if (uniqueKey) processedPostIds.add(uniqueKey);
+    if (uniqueKey) trackPostId(uniqueKey);
     return;
   }
 
   const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
   jsonBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
-  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData, false));
+  jsonBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showJsonFilterMenu(e, jsonBtn, postData);
+  });
+  jsonBtn.title = 'Copy JSON (right-click for options)';
 
   const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
   liBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+  liBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showPromptTemplateMenu(e, liBtn, postData);
+  });
+  liBtn.title = 'Generate LinkedIn post (right-click to select template)';
 
   const li = document.createElement('li');
   li.style.display = 'inline-block';
@@ -539,7 +581,7 @@ function injectButtonsToOldRedditPost(postElement) {
   toolbar.appendChild(li);
 
   postElement.setAttribute(CONFIG.markerAttr, 'true');
-  if (uniqueKey) processedPostIds.add(uniqueKey);
+  if (uniqueKey) trackPostId(uniqueKey);
 }
 
 // ============================================================================
@@ -618,10 +660,22 @@ function injectButtonsToActionRow(actionRow) {
 
   // Create buttons
   const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
-  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData, false));
+  jsonBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showJsonFilterMenu(e, jsonBtn, postData);
+  });
+  jsonBtn.title = 'Copy JSON (right-click for options)';
 
   const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+  liBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showPromptTemplateMenu(e, liBtn, postData);
+  });
+  liBtn.title = 'Generate LinkedIn post (right-click to select template)';
 
   const wrapper = document.createElement('span');
   wrapper.className = 'reddjson-buttons-wrapper';
@@ -653,6 +707,136 @@ function injectButtonsToActionRow(actionRow) {
     actionRow.appendChild(wrapper);
   }
 }
+
+// ============================================================================
+// JSON FILTER CONTEXT MENU
+// ============================================================================
+
+function showJsonFilterMenu(e, btn, postData) {
+  document.querySelectorAll('.reddjson-filter-menu').forEach(m => m.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'reddjson-filter-menu';
+  menu.style.cssText = `
+    position:fixed; z-index:2147483647; background:#fff; border:1px solid #e0e0e0;
+    border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.15); padding:4px 0;
+    min-width:180px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  `;
+
+  const options = [
+    { label: 'Full Thread JSON', desc: 'Post + all comments', postOnly: false },
+    { label: 'Post Only JSON', desc: 'No comments (smaller)', postOnly: true },
+  ];
+
+  options.forEach(opt => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.style.cssText = `
+      display:block; width:100%; padding:8px 14px; border:none; background:none;
+      text-align:left; cursor:pointer; font-size:12px; color:#1a1a1b;
+      font-family:inherit; transition:background .15s;
+    `;
+    item.innerHTML = `<strong>${opt.label}</strong><br><span style="font-size:10px;color:#878a8c">${opt.desc}</span>`;
+    item.addEventListener('mouseenter', () => { item.style.background = 'rgba(255,69,0,.06)'; });
+    item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+    item.addEventListener('click', (ev) => {
+      menu.remove();
+      handleJsonCopy(ev, btn, postData, opt.postOnly);
+    });
+    menu.appendChild(item);
+  });
+
+  menu.style.top = `${e.clientY}px`;
+  menu.style.left = `${e.clientX}px`;
+  document.body.appendChild(menu);
+
+  const closeMenu = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('click', closeMenu, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeMenu, true), 0);
+}
+
+// ============================================================================
+// PROMPT TEMPLATES CONTEXT MENU
+// ============================================================================
+
+async function showPromptTemplateMenu(e, btn, postData) {
+  document.querySelectorAll('.reddjson-filter-menu').forEach(m => m.remove());
+
+  try {
+    const settingsResp = await chrome.runtime.sendMessage({ action: 'getSettings' });
+    const settings = settingsResp?.settings;
+    const prompts = settings?.systemPrompts || [];
+
+    if (prompts.length === 0) {
+      showToast('No templates found', 'error', btn);
+      return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'reddjson-filter-menu';
+    menu.style.cssText = `
+      position:fixed; z-index:2147483647; background:#fff; border:1px solid #e0e0e0;
+      border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.15); padding:4px 0;
+      min-width:220px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    `;
+
+    const activePromptId = settings.activePromptId || 'default';
+
+    prompts.forEach(p => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.style.cssText = `
+        display:block; width:100%; padding:8px 14px; border:none; background:none;
+        text-align:left; cursor:pointer; font-size:12px; color:#1a1a1b;
+        font-family:inherit; transition:background .15s; line-height:1.4;
+      `;
+      const isActive = p.id === activePromptId;
+      const previewText = p.prompt ? p.prompt.substring(0, 45).replace(/\n/g, ' ') : '';
+      item.innerHTML = `<strong>${isActive ? '★ ' : ''}${escapeHtml(p.name)}</strong><br><span style="font-size:10px;color:#878a8c">${escapeHtml(previewText)}...</span>`;
+      item.addEventListener('mouseenter', () => { item.style.background = 'rgba(10,102,194,.06)'; });
+      item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+      item.addEventListener('click', (ev) => {
+        menu.remove();
+        handleGenerateLI(ev, btn, postData, p.id);
+      });
+      menu.appendChild(item);
+    });
+
+    menu.style.top = `${e.clientY}px`;
+    menu.style.left = `${e.clientX}px`;
+    document.body.appendChild(menu);
+
+    const closeMenu = (ev) => {
+      if (!menu.contains(ev.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu, true), 0);
+  } catch (err) {
+    showToast('Failed to load templates', 'error', btn);
+  }
+}
+
+// ============================================================================
+// MESSAGE LISTENER — keyboard shortcut support
+// ============================================================================
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'showToast') {
+    showToast(message.message, message.type || 'info');
+  } else if (message.action === 'copyToClipboard') {
+    navigator.clipboard.writeText(message.text).then(() => {
+      showToast('JSON copied!', 'success');
+    }).catch(() => {
+      showToast('Copy failed — focus this tab', 'error');
+    });
+  }
+});
 
 // ============================================================================
 // MUTATION OBSERVER

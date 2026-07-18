@@ -1,14 +1,16 @@
 /**
- * ReddJSON Background Service Worker v2.0
+ * ReddJSON Background Service Worker v2.1
  * ═══════════════════════════════════════════════════════════════════
  * Handles:
  *   1. Reddit .json API fetching
  *   2. AI provider calls (OpenRouter, Groq — OpenAI-compatible)
  *   3. chrome.storage.local for history, AI posts, settings
  *   4. Side panel management (open on action click, Reddit-only)
+ *   5. Keyboard shortcut commands
+ *   6. JSON filtering (post-only vs full thread)
+ *   7. Storage size optimization
  *
- * @fileoverview Service worker — the brain of ReddJSON
- * @version 2.0.0
+ * @version 2.1.0
  */
 
 // ============================================================================
@@ -17,10 +19,15 @@
 
 const MAX_HISTORY_ENTRIES = 50;
 const MAX_AI_POSTS = 50;
-const USER_AGENT = 'ReddJSON/2.0.0 (Chrome Extension)';
+const MAX_JSON_STORAGE_BYTES = 500_000;
+const USER_AGENT = 'ReddJSON/2.1.0 (Chrome Extension)';
 
-/** Default system prompt for LinkedIn post generation */
-const DEFAULT_SYSTEM_PROMPT = `You are a world-class LinkedIn content strategist and viral post creator with 10+ years of experience generating posts that regularly hit 100k–1M+ impressions.
+/** Default system prompt templates for LinkedIn post generation */
+const PROMPT_TEMPLATES = [
+  {
+    id: 'default',
+    name: 'LinkedIn Viral Staircase',
+    prompt: `You are a world-class LinkedIn content strategist and viral post creator with 10+ years of experience generating posts that regularly hit 100k–1M+ impressions.
 
 Your mission: Transform the entire Reddit thread (full JSON data) into ONE highly engaging, professional LinkedIn post in "staircase format" (numbered or bulleted ladder style that feels like a story and keeps people scrolling).
 
@@ -33,7 +40,82 @@ Rules (NEVER break these):
 6. Length: 300–650 words (perfect LinkedIn sweet spot).
 7. If the Reddit post has images, videos, or media, mention at the end: "Attach this visual: [image URL]" so the user knows exactly what to upload.
 
-Here is the full Reddit thread JSON:`;
+Here is the full Reddit thread JSON:`,
+    isDefault: true
+  },
+  {
+    id: 'storytelling',
+    name: 'Narrative Storyteller',
+    prompt: `You are a master business storyteller. Your goal is to transform the provided Reddit thread JSON into a highly engaging, story-driven LinkedIn post.
+
+Structure your narrative using this format:
+1. The Hook: Introduce a struggle, conflict, or high-stakes scenario immediately.
+2. The Background: Briefly explain the situation.
+3. The Pivot/Insight: Introduce the central learning or realization gained from the Reddit discussion/comments.
+4. The Takeaways: Deliver 3 core lessons formatted as short, punchy paragraphs.
+5. The Outro: Ask a thought-provoking question to drive comments.
+
+Rules:
+- Keep paragraph length to a maximum of 2 sentences for high readability.
+- Write with a natural, conversational, humble yet authoritative voice (first-person "I" or third-person storytelling).
+- No emojis, no markdown formatting.
+- Avoid business jargon or cliché corporate speak.
+- Length: 250-450 words.
+- If the Reddit post has images, videos, or media, mention at the end: "Attach this visual: [image URL]" so the user knows exactly what to upload.
+
+Here is the full Reddit thread JSON:`,
+    isDefault: true
+  },
+  {
+    id: 'playbook',
+    name: 'Actionable Playbook (How-to)',
+    prompt: `You are a professional educational content creator on LinkedIn. Your mission is to extract the practical knowledge, tips, tools, and steps from this Reddit thread JSON and package it into an actionable "How-To" Playbook or Masterclass.
+
+Structure of the Playbook:
+1. Hook: State the desired outcome and the problem being solved (e.g., "How to achieve X without doing Y").
+2. The Challenge: Why most people fail at this.
+3. The Step-by-Step Playbook: 3-5 clear, sequentially numbered steps based on the Reddit post and top comments. Each step should have:
+   - A bold/clear header.
+   - 1-2 lines explaining "why" it matters.
+   - 1 bullet point explaining "how" to do it.
+4. The Result: What happens when they follow this.
+5. CTA: Encourage users to bookmark/save the post or comment their own tips.
+
+Rules:
+- Extremely concise, high signal-to-noise ratio.
+- Use plain text. Use symbols like → or • for bullets.
+- Length: 300-500 words.
+- If the Reddit post has images, videos, or media, mention at the end: "Attach this visual: [image URL]" so the user knows exactly what to upload.
+
+Here is the full Reddit thread JSON:`,
+    isDefault: true
+  },
+  {
+    id: 'contrarian',
+    name: 'Contrarian Debate / Discussion',
+    prompt: `You are a critical thinker and LinkedIn thought leader who loves exploring nuances. Take the Reddit thread JSON and construct a LinkedIn post that highlights a debate, a common misconception, or a contrarian perspective found in the thread.
+
+Structure:
+1. The Hook: Challenge a common belief or highlight a paradox (e.g., "Most people think X. But the reality is Y.").
+2. The Debate: Show the tension or contrasting views expressed in the Reddit thread (e.g., "View A argues X, but View B points out Y").
+3. The Nuance: Explain the middle ground or the non-obvious truth that people miss.
+4. The Takeaway: How the reader can apply this critical perspective to their work or life.
+5. CTA: Ask the audience where they stand on this debate.
+
+Rules:
+- Tone should be respectful, intellectually curious, and engaging.
+- Do not take a rigid side; guide the reader to think.
+- Use clean formatting with line breaks.
+- No markdown, minimal emojis.
+- Length: 250-400 words.
+- If the Reddit post has images, videos, or media, mention at the end: "Attach this visual: [image URL]" so the user knows exactly what to upload.
+
+Here is the full Reddit thread JSON:`,
+    isDefault: true
+  }
+];
+
+const DEFAULT_SYSTEM_PROMPT = PROMPT_TEMPLATES[0].prompt;
 
 // Provider configurations 
 const PROVIDERS = {
@@ -110,6 +192,16 @@ async function fetchRedditJSON(permalink) {
       return { success: false, error: 'Network error — check your connection' };
     }
     return { success: false, error: error.message || 'Unknown error' };
+  }
+}
+
+function extractPostOnly(fullData) {
+  try {
+    if (!Array.isArray(fullData) || fullData.length === 0) return fullData;
+    const postListing = fullData[0];
+    return [postListing];
+  } catch {
+    return fullData;
   }
 }
 
@@ -298,6 +390,7 @@ async function addToHistory(entry) {
 
     const jsonString = JSON.stringify(entry.jsonData, null, 2);
     const jsonPreview = jsonString.substring(0, 300) + (jsonString.length > 300 ? '…' : '');
+    const jsonSizeBytes = new Blob([jsonString]).size;
 
     const historyEntry = {
       id: `reddjson_${Date.now()}_${entry.postId}`,
@@ -306,7 +399,8 @@ async function addToHistory(entry) {
       subreddit: entry.subreddit || 'unknown',
       postId: entry.postId || 'unknown',
       jsonPreview,
-      fullJson: entry.jsonData,
+      fullJson: jsonSizeBytes <= MAX_JSON_STORAGE_BYTES ? entry.jsonData : null,
+      jsonTruncated: jsonSizeBytes > MAX_JSON_STORAGE_BYTES,
       timestamp: Date.now(),
       copiedCount: 1
     };
@@ -449,12 +543,24 @@ async function getSettings() {
       providers: {},
       defaultProvider: '',
       defaultModel: '',
-      systemPrompts: [
-        { id: 'default', name: 'LinkedIn Viral Post', prompt: DEFAULT_SYSTEM_PROMPT, isDefault: true }
-      ],
+      systemPrompts: PROMPT_TEMPLATES,
       activePromptId: 'default'
     };
-    return { success: true, settings: { ...defaults, ...result.reddjson_settings } };
+
+    const settings = { ...defaults, ...result.reddjson_settings };
+
+    // Ensure all built-in templates are present in settings.systemPrompts
+    if (!settings.systemPrompts || settings.systemPrompts.length === 0) {
+      settings.systemPrompts = JSON.parse(JSON.stringify(PROMPT_TEMPLATES));
+    } else {
+      PROMPT_TEMPLATES.forEach(tpl => {
+        if (!settings.systemPrompts.some(p => p.id === tpl.id)) {
+          settings.systemPrompts.push(JSON.parse(JSON.stringify(tpl)));
+        }
+      });
+    }
+
+    return { success: true, settings };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -479,8 +585,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     switch (message.action) {
       // ── Reddit JSON ──
-      case 'fetchJSON':
+      case 'fetchJSON': {
+        const result = await fetchRedditJSON(message.permalink);
+        if (result.success && message.postOnly) {
+          result.data = extractPostOnly(result.data);
+        }
+        return result;
+      }
+
+      case 'refetchJSON': {
         return await fetchRedditJSON(message.permalink);
+      }
 
       // ── History ──
       case 'addToHistory':
@@ -592,7 +707,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('[ReddJSON] 🎉 Extension installed!');
+    console.log('[ReddJSON] Extension installed!');
     chrome.storage.local.set({
       reddjson_history: [],
       reddjson_ai_posts: [],
@@ -600,15 +715,92 @@ chrome.runtime.onInstalled.addListener((details) => {
         providers: {},
         defaultProvider: '',
         defaultModel: '',
-        systemPrompts: [
-          { id: 'default', name: 'LinkedIn Viral Post', prompt: DEFAULT_SYSTEM_PROMPT, isDefault: true }
-        ],
+        systemPrompts: PROMPT_TEMPLATES,
         activePromptId: 'default'
       }
     });
   } else if (details.reason === 'update') {
-    console.log('[ReddJSON] ⬆️ Updated to v' + chrome.runtime.getManifest().version);
+    console.log('[ReddJSON] Updated to v' + chrome.runtime.getManifest().version);
   }
 });
 
-console.log('[ReddJSON] Background service worker v2.0 loaded ✓');
+// ============================================================================
+// KEYBOARD SHORTCUTS
+// ============================================================================
+
+chrome.commands.onCommand.addListener(async (command) => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.url?.includes('reddit.com')) return;
+
+  if (command === 'copy-json') {
+    const urlMatch = new URL(tab.url).pathname.match(/\/r\/[^/]+\/comments\/[^/]+/);
+    if (!urlMatch) return;
+    const permalink = urlMatch[0];
+
+    const result = await fetchRedditJSON(permalink);
+    if (!result.success) {
+      chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: result.error, type: 'error' });
+      return;
+    }
+
+    const pretty = JSON.stringify(result.data, null, 2);
+    chrome.tabs.sendMessage(tab.id, { action: 'copyToClipboard', text: pretty });
+
+    const title = result.data?.[0]?.data?.children?.[0]?.data?.title || 'Untitled';
+    const subreddit = result.data?.[0]?.data?.children?.[0]?.data?.subreddit || 'unknown';
+    const postId = result.data?.[0]?.data?.children?.[0]?.data?.id || 'unknown';
+    await addToHistory({ permalink, title, subreddit, postId, jsonData: result.data });
+  } else if (command === 'generate-post') {
+    const urlMatch = new URL(tab.url).pathname.match(/\/r\/[^/]+\/comments\/[^/]+/);
+    if (!urlMatch) return;
+    const permalink = urlMatch[0];
+
+    const settings = (await getSettings()).settings;
+    if (!settings?.defaultProvider || !settings?.defaultModel) {
+      chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: 'Set up AI provider in Settings first', type: 'error' });
+      return;
+    }
+
+    chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: 'Generating LinkedIn post...', type: 'linkedin' });
+
+    const providerConfig = settings.providers?.[settings.defaultProvider];
+    if (!providerConfig?.apiKey) {
+      chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: 'No API key configured', type: 'error' });
+      return;
+    }
+
+    const jsonResult = await fetchRedditJSON(permalink);
+    if (!jsonResult.success) {
+      chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: jsonResult.error, type: 'error' });
+      return;
+    }
+
+    const promptObj = settings.systemPrompts?.find(p => p.id === settings.activePromptId);
+    const systemPrompt = promptObj?.prompt || DEFAULT_SYSTEM_PROMPT;
+    const media = extractMediaFromRedditJson(jsonResult.data);
+
+    const aiResult = await generateAIPost(
+      settings.defaultProvider, providerConfig.apiKey, settings.defaultModel, systemPrompt, jsonResult.data
+    );
+
+    if (!aiResult.success) {
+      chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: aiResult.error, type: 'error' });
+      return;
+    }
+
+    const title = jsonResult.data?.[0]?.data?.children?.[0]?.data?.title || 'Untitled';
+    const subreddit = jsonResult.data?.[0]?.data?.children?.[0]?.data?.subreddit || 'unknown';
+    const postId = jsonResult.data?.[0]?.data?.children?.[0]?.data?.id || 'unknown';
+
+    await addAIPost({
+      permalink, redditTitle: title, subreddit, postId,
+      generatedText: aiResult.text, model: aiResult.model,
+      provider: settings.defaultProvider, media, usage: aiResult.usage
+    });
+
+    chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: 'LinkedIn post ready! Check sidebar', type: 'success' });
+    try { await chrome.sidePanel.open({ tabId: tab.id }); } catch {}
+  }
+});
+
+console.log('[ReddJSON] Background service worker v2.1 loaded');

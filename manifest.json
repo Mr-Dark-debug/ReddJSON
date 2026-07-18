@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ReddJSON — Reddit to LinkedIn AI",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Copy Reddit post JSON, generate LinkedIn posts with AI. Sidebar with history, AI posts, and provider settings.",
   "author": "ReddJSON Team",
   "icons": {
@@ -27,6 +27,22 @@
     "https://openrouter.ai/*",
     "https://api.groq.com/*"
   ],
+  "commands": {
+    "copy-json": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+J",
+        "mac": "Command+Shift+J"
+      },
+      "description": "Copy current Reddit post JSON"
+    },
+    "generate-post": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Generate LinkedIn post from current page"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },

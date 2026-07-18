@@ -1,12 +1,13 @@
 /**
- * ReddJSON Sidebar v2.0
+ * ReddJSON Sidebar v2.1
  * ═══════════════════════════════════════════════════════════════════
  * 3-tab UI: History | AI Posts | Settings
  *
  * Communicates with background.js via chrome.runtime.sendMessage.
  * All data stored in chrome.storage.local only.
  *
- * @version 2.0.0
+ * v2.1 additions: dark mode, export/import, debounced search,
+ * keyboard shortcuts, sidebar toasts, storage optimization.
  */
 
 // ============================================================================
@@ -38,10 +39,65 @@ function formatCtx(n) {
     return n.toString();
 }
 
+function debounce(fn, wait) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+}
+
 // Global state
 let cachedModels = { openrouter: [], groq: [] };
+let cachedHistory = [];
+let cachedAIPosts = [];
 let currentSettings = null;
 let editingPromptId = null;
+
+// ============================================================================
+// SIDEBAR TOAST
+// ============================================================================
+
+function showSidebarToast(message, type = 'info') {
+    const toast = $('#sidebar-toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.className = `sidebar-toast ${type} show`;
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => {
+        toast.classList.remove('show');
+    }, 2000);
+}
+
+// ============================================================================
+// DARK MODE
+// ============================================================================
+
+function initTheme() {
+    const saved = localStorage.getItem('reddjson_theme');
+    if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    updateThemeIcon();
+
+    $('#theme-toggle')?.addEventListener('click', () => {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        if (isDark) {
+            document.documentElement.removeAttribute('data-theme');
+            localStorage.setItem('reddjson_theme', 'light');
+        } else {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            localStorage.setItem('reddjson_theme', 'dark');
+        }
+        updateThemeIcon();
+    });
+}
+
+function updateThemeIcon() {
+    const icon = $('#theme-icon');
+    if (!icon) return;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    icon.innerHTML = isDark
+        ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+        : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+}
 
 // ============================================================================
 // TABS
@@ -58,7 +114,6 @@ function initTabs() {
             const panel = $(`#${panelId}`);
             if (panel) panel.classList.add('active');
 
-            // Refresh data when tab becomes visible
             if (tab.dataset.tab === 'history') loadHistory();
             else if (tab.dataset.tab === 'ai-posts') loadAIPosts();
             else if (tab.dataset.tab === 'settings') loadSettings();
@@ -74,12 +129,16 @@ async function loadHistory() {
     const resp = await chrome.runtime.sendMessage({ action: 'getHistory' });
     if (!resp?.success) return;
 
-    const history = resp.history || [];
+    cachedHistory = resp.history || [];
+    renderHistory();
+}
+
+function renderHistory() {
     const list = $('#history-list');
     const empty = $('#history-empty');
     const stats = $('#history-stats');
 
-    if (history.length === 0) {
+    if (cachedHistory.length === 0) {
         list.innerHTML = '';
         empty.style.display = 'flex';
         stats.textContent = '';
@@ -87,13 +146,13 @@ async function loadHistory() {
     }
 
     empty.style.display = 'none';
-    const totalCopies = history.reduce((s, e) => s + (e.copiedCount || 1), 0);
-    stats.textContent = `${history.length} posts · ${totalCopies} total copies`;
+    const totalCopies = cachedHistory.reduce((s, e) => s + (e.copiedCount || 1), 0);
+    stats.textContent = `${cachedHistory.length} posts · ${totalCopies} total copies`;
 
     const search = ($('#history-search')?.value || '').toLowerCase();
     const filtered = search
-        ? history.filter(e => (e.title + e.subreddit).toLowerCase().includes(search))
-        : history;
+        ? cachedHistory.filter(e => (e.title + e.subreddit).toLowerCase().includes(search))
+        : cachedHistory;
 
     list.innerHTML = filtered.map(e => `
     <div class="entry" data-id="${escapeHtml(e.id)}">
@@ -106,9 +165,12 @@ async function loadHistory() {
         <span>×${e.copiedCount || 1}</span>
       </div>
       <div class="entry-preview">${escapeHtml(e.jsonPreview || '')}</div>
-      <div class="entry-actions">
+      <div class="entry-actions" style="position: relative;">
         <button class="btn-ghost" data-action="recopy" data-id="${escapeHtml(e.id)}">📋 Re-copy</button>
         <button class="btn-ghost" data-action="view" data-id="${escapeHtml(e.id)}">👁 View</button>
+        <button class="btn-ghost" data-action="generate-ai" data-id="${escapeHtml(e.id)}" style="color: var(--linkedin);">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: middle; margin-right: 2px;"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>Post
+        </button>
         <button class="btn-ghost" data-action="delete" data-id="${escapeHtml(e.id)}">🗑</button>
       </div>
     </div>
@@ -116,7 +178,7 @@ async function loadHistory() {
 }
 
 function initHistoryEvents() {
-    $('#history-search')?.addEventListener('input', loadHistory);
+    $('#history-search')?.addEventListener('input', debounce(() => renderHistory(), 150));
 
     $('#history-list').addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action]');
@@ -125,15 +187,37 @@ function initHistoryEvents() {
 
         if (action === 'recopy') {
             const resp = await chrome.runtime.sendMessage({ action: 'getHistoryEntry', entryId: id });
-            if (resp?.success && resp.entry?.fullJson) {
-                await navigator.clipboard.writeText(JSON.stringify(resp.entry.fullJson, null, 2));
-                btn.textContent = '✓ Copied!';
-                setTimeout(() => { btn.textContent = '📋 Re-copy'; }, 1500);
+            if (resp?.success && resp.entry) {
+                let json = resp.entry.fullJson;
+                if (!json && resp.entry.permalink) {
+                    showSidebarToast('Re-fetching from Reddit...', 'info');
+                    const fetchResp = await chrome.runtime.sendMessage({ action: 'refetchJSON', permalink: resp.entry.permalink });
+                    if (fetchResp?.success) json = fetchResp.data;
+                    else { showSidebarToast(fetchResp?.error || 'Fetch failed', 'error'); return; }
+                }
+                if (json) {
+                    await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+                    btn.textContent = '✓ Copied!';
+                    showSidebarToast('JSON copied to clipboard', 'success');
+                    setTimeout(() => { btn.textContent = '📋 Re-copy'; }, 1500);
+                }
             }
         } else if (action === 'view') {
             const resp = await chrome.runtime.sendMessage({ action: 'getHistoryEntry', entryId: id });
             if (resp?.success && resp.entry) {
-                showJsonModal(resp.entry.title, resp.entry.fullJson);
+                let json = resp.entry.fullJson;
+                if (!json && resp.entry.permalink) {
+                    showSidebarToast('Re-fetching from Reddit...', 'info');
+                    const fetchResp = await chrome.runtime.sendMessage({ action: 'refetchJSON', permalink: resp.entry.permalink });
+                    if (fetchResp?.success) json = fetchResp.data;
+                    else { showSidebarToast(fetchResp?.error || 'Fetch failed', 'error'); return; }
+                }
+                if (json) showJsonModal(resp.entry.title, json);
+            }
+        } else if (action === 'generate-ai') {
+            const resp = await chrome.runtime.sendMessage({ action: 'getHistoryEntry', entryId: id });
+            if (resp?.success && resp.entry) {
+                showSidebarPromptMenu(e, btn, resp.entry);
             }
         } else if (action === 'delete') {
             showConfirm('Delete this entry?', async () => {
@@ -149,6 +233,137 @@ function initHistoryEvents() {
             loadHistory();
         });
     });
+
+    // Export history
+    $('#history-export')?.addEventListener('click', () => {
+        if (cachedHistory.length === 0) {
+            showSidebarToast('No history to export', 'error');
+            return;
+        }
+        exportAsJSON(cachedHistory, 'reddjson-history');
+        showSidebarToast(`Exported ${cachedHistory.length} entries`, 'success');
+    });
+
+    // Import history
+    $('#history-import')?.addEventListener('click', () => {
+        triggerImport('history');
+    });
+}
+
+// ============================================================================
+// SIDEBAR AI GENERATION & TEMPLATE MENU
+// ============================================================================
+
+function showSidebarPromptMenu(e, btn, entry) {
+    $$('.sidebar-dropdown-menu').forEach(m => m.remove());
+
+    const prompts = currentSettings?.systemPrompts || [];
+    if (prompts.length === 0) {
+        showSidebarToast('No templates found in settings', 'error');
+        return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'sidebar-dropdown-menu';
+    menu.style.cssText = `
+        position: absolute;
+        z-index: 1000;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-md);
+        padding: 4px 0;
+        min-width: 180px;
+        max-width: 240px;
+    `;
+
+    prompts.forEach(p => {
+        const item = document.createElement('button');
+        item.style.cssText = `
+            display: block;
+            width: 100%;
+            padding: 8px 12px;
+            border: none;
+            background: none;
+            text-align: left;
+            font-family: var(--font);
+            font-size: 11px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: background var(--transition);
+            line-height: 1.3;
+        `;
+        const previewText = p.prompt ? p.prompt.substring(0, 35).replace(/\n/g, ' ') : '';
+        item.innerHTML = `<strong>${escapeHtml(p.name)}</strong><br><span style="color:var(--text-muted);font-size:9px">${escapeHtml(previewText)}...</span>`;
+
+        item.addEventListener('mouseenter', () => { item.style.background = 'var(--accent-light)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+
+        item.addEventListener('click', async () => {
+            menu.remove();
+            await generateSidebarAIPost(btn, entry, p.id);
+        });
+        menu.appendChild(item);
+    });
+
+    const entryEl = btn.closest('.entry');
+    if (entryEl) {
+        entryEl.appendChild(menu);
+        menu.style.bottom = `${btn.offsetHeight + 10}px`;
+        menu.style.right = `12px`;
+    }
+
+    const closeDropdown = (ev) => {
+        if (!menu.contains(ev.target) && ev.target !== btn) {
+            menu.remove();
+            document.removeEventListener('click', closeDropdown, true);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closeDropdown, true), 0);
+}
+
+async function generateSidebarAIPost(btn, entry, promptId) {
+    if (!currentSettings?.defaultProvider || !currentSettings?.defaultModel) {
+        showSidebarToast('Set up AI provider in Settings first', 'error');
+        return;
+    }
+
+    const origText = btn.innerHTML;
+    btn.innerHTML = '⚡ Generating...';
+    btn.disabled = true;
+    btn.style.cursor = 'wait';
+
+    showSidebarToast('Generating LinkedIn post...', 'info');
+
+    try {
+        const resp = await chrome.runtime.sendMessage({
+            action: 'generateLinkedInPost',
+            permalink: entry.permalink,
+            title: entry.title,
+            subreddit: entry.subreddit,
+            postId: entry.postId,
+            promptId: promptId,
+            providerId: currentSettings.defaultProvider,
+            modelId: currentSettings.defaultModel
+        });
+
+        if (!resp?.success) {
+            showSidebarToast(resp?.error || 'Generation failed', 'error');
+            return;
+        }
+
+        showSidebarToast('LinkedIn post ready!', 'success');
+
+        // Auto switch tab to AI Posts
+        const aiTab = $('[data-tab="ai-posts"]');
+        if (aiTab) aiTab.click();
+    } catch (err) {
+        showSidebarToast(err.message || 'Generation failed', 'error');
+    } finally {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        btn.style.cursor = 'pointer';
+    }
 }
 
 // ============================================================================
@@ -159,11 +374,15 @@ async function loadAIPosts() {
     const resp = await chrome.runtime.sendMessage({ action: 'getAIPosts' });
     if (!resp?.success) return;
 
-    const posts = resp.posts || [];
+    cachedAIPosts = resp.posts || [];
+    renderAIPosts();
+}
+
+function renderAIPosts() {
     const list = $('#ai-posts-list');
     const empty = $('#ai-posts-empty');
 
-    if (posts.length === 0) {
+    if (cachedAIPosts.length === 0) {
         list.innerHTML = '';
         empty.style.display = 'flex';
         return;
@@ -172,8 +391,8 @@ async function loadAIPosts() {
     empty.style.display = 'none';
     const search = ($('#ai-search')?.value || '').toLowerCase();
     const filtered = search
-        ? posts.filter(p => (p.redditTitle + p.generatedText).toLowerCase().includes(search))
-        : posts;
+        ? cachedAIPosts.filter(p => (p.redditTitle + p.generatedText).toLowerCase().includes(search))
+        : cachedAIPosts;
 
     list.innerHTML = filtered.map(p => {
         const mediaHtml = (p.media || []).slice(0, 3).map(m =>
@@ -207,10 +426,9 @@ async function loadAIPosts() {
 }
 
 function initAIPostsEvents() {
-    $('#ai-search')?.addEventListener('input', loadAIPosts);
+    $('#ai-search')?.addEventListener('input', debounce(() => renderAIPosts(), 150));
 
     $('#ai-posts-list').addEventListener('click', async (e) => {
-        // Toggle expand
         const textEl = e.target.closest('.ai-post-text');
         if (textEl) { textEl.classList.toggle('expanded'); return; }
 
@@ -218,19 +436,20 @@ function initAIPostsEvents() {
         if (!btn) return;
         const { action, id } = btn.dataset;
 
-        const resp = await chrome.runtime.sendMessage({ action: 'getAIPosts' });
-        const post = resp?.posts?.find(p => p.id === id);
+        const post = cachedAIPosts.find(p => p.id === id);
         if (!post && action !== 'delete-ai') return;
 
         if (action === 'copy-text') {
             await navigator.clipboard.writeText(post.generatedText);
             btn.textContent = '✓ Copied!';
+            showSidebarToast('Post text copied', 'success');
             setTimeout(() => { btn.textContent = '📋 Copy Text'; }, 1500);
         } else if (action === 'copy-media') {
             const url = post.media?.[0]?.url;
             if (url) {
                 await navigator.clipboard.writeText(url);
                 btn.textContent = '✓ Copied!';
+                showSidebarToast('Image URL copied', 'success');
                 setTimeout(() => { btn.textContent = '🖼 Copy Image URL'; }, 1500);
             }
         } else if (action === 'open-linkedin') {
@@ -251,6 +470,87 @@ function initAIPostsEvents() {
             loadAIPosts();
         });
     });
+
+    // Export AI posts
+    $('#ai-export')?.addEventListener('click', () => {
+        if (cachedAIPosts.length === 0) {
+            showSidebarToast('No AI posts to export', 'error');
+            return;
+        }
+        exportAsJSON(cachedAIPosts, 'reddjson-ai-posts');
+        showSidebarToast(`Exported ${cachedAIPosts.length} posts`, 'success');
+    });
+
+    // Import AI posts
+    $('#ai-import')?.addEventListener('click', () => {
+        triggerImport('ai-posts');
+    });
+}
+
+// ============================================================================
+// EXPORT / IMPORT
+// ============================================================================
+
+function exportAsJSON(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+let importTarget = null;
+
+function triggerImport(target) {
+    importTarget = target;
+    const input = $('#import-file-input');
+    input.value = '';
+    input.click();
+}
+
+function initImport() {
+    $('#import-file-input')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+
+            if (!Array.isArray(data)) {
+                showSidebarToast('Invalid file: expected an array', 'error');
+                return;
+            }
+
+            if (importTarget === 'history') {
+                const resp = await chrome.runtime.sendMessage({ action: 'getHistory' });
+                const existing = resp?.history || [];
+                const existingIds = new Set(existing.map(e => e.postId));
+                const newEntries = data.filter(e => e.postId && !existingIds.has(e.postId));
+                const merged = [...newEntries, ...existing].slice(0, 50);
+                await chrome.runtime.sendMessage({
+                    action: 'saveSettings',
+                    settings: currentSettings
+                });
+                await chrome.storage.local.set({ reddjson_history: merged });
+                loadHistory();
+                showSidebarToast(`Imported ${newEntries.length} new entries`, 'success');
+            } else if (importTarget === 'ai-posts') {
+                const resp = await chrome.runtime.sendMessage({ action: 'getAIPosts' });
+                const existing = resp?.posts || [];
+                const existingIds = new Set(existing.map(e => e.id));
+                const newPosts = data.filter(e => e.id && !existingIds.has(e.id));
+                const merged = [...newPosts, ...existing].slice(0, 50);
+                await chrome.storage.local.set({ reddjson_ai_posts: merged });
+                loadAIPosts();
+                showSidebarToast(`Imported ${newPosts.length} new posts`, 'success');
+            }
+        } catch (err) {
+            showSidebarToast('Import failed: invalid JSON', 'error');
+        }
+    });
 }
 
 // ============================================================================
@@ -262,25 +562,32 @@ async function loadSettings() {
     if (!resp?.success) return;
     currentSettings = resp.settings;
 
-    // Restore API keys
     const orKey = currentSettings.providers?.openrouter?.apiKey || '';
     const groqKey = currentSettings.providers?.groq?.apiKey || '';
     $('#openrouter-key').value = orKey;
     $('#groq-key').value = groqKey;
 
-    // Update status badges
     updateProviderStatus('openrouter', orKey);
     updateProviderStatus('groq', groqKey);
 
-    // Restore defaults
     $('#default-provider').value = currentSettings.defaultProvider || '';
+
+    // Load persisted models from settings cache if they exist, otherwise fetch
+    ['openrouter', 'groq'].forEach(pid => {
+        const key = currentSettings.providers?.[pid]?.apiKey || '';
+        const savedModels = currentSettings.providers?.[pid]?.models || [];
+        if (key) {
+            if (savedModels.length > 0) {
+                cachedModels[pid] = savedModels;
+                $(`#${pid}-models-area`).style.display = 'block';
+                renderModels(pid);
+            } else {
+                loadModelsForProvider(pid, key);
+            }
+        }
+    });
+
     updateDefaultModelDropdown();
-
-    // Load cached models if keys exist
-    if (orKey) loadModelsForProvider('openrouter', orKey);
-    if (groqKey) loadModelsForProvider('groq', groqKey);
-
-    // Render prompts
     renderPrompts();
 }
 
@@ -309,8 +616,18 @@ async function loadModelsForProvider(providerId, apiKey) {
         return;
     }
 
-    cachedModels[providerId] = resp.models || [];
+    const fetchedModels = resp.models || [];
+    cachedModels[providerId] = fetchedModels;
     renderModels(providerId);
+
+    // Persist fetched models list into settings storage
+    if (currentSettings) {
+        if (!currentSettings.providers) currentSettings.providers = {};
+        if (!currentSettings.providers[providerId]) currentSettings.providers[providerId] = {};
+        currentSettings.providers[providerId].models = fetchedModels;
+        await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
+        updateDefaultModelDropdown();
+    }
 }
 
 function renderModels(providerId) {
@@ -325,7 +642,6 @@ function renderModels(providerId) {
     if (search) models = models.filter(m => m.name.toLowerCase().includes(search) || m.id.toLowerCase().includes(search));
     if (freeOnly) models = models.filter(m => m.isFree);
 
-    // Sort: free first, then alphabetical
     models.sort((a, b) => {
         if (a.isFree && !b.isFree) return -1;
         if (!a.isFree && b.isFree) return 1;
@@ -349,7 +665,6 @@ function renderModels(providerId) {
 }
 
 function initSettingsEvents() {
-    // Save provider keys
     ['openrouter', 'groq'].forEach(pid => {
         $(`#${pid}-save`).addEventListener('click', async () => {
             const key = $(`#${pid}-key`).value.trim();
@@ -363,18 +678,16 @@ function initSettingsEvents() {
             await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
             updateProviderStatus(pid, key);
             loadModelsForProvider(pid, key);
+            showSidebarToast('API key saved', 'success');
         });
 
-        // Model search
         const searchEl = $(`#${pid}-model-search`);
-        if (searchEl) searchEl.addEventListener('input', () => renderModels(pid));
+        if (searchEl) searchEl.addEventListener('input', debounce(() => renderModels(pid), 150));
 
-        // Free filter
         const freeEl = $(`#${pid}-free-filter`);
         if (freeEl) freeEl.addEventListener('change', () => renderModels(pid));
     });
 
-    // Model selection click
     document.addEventListener('click', async (e) => {
         const modelItem = e.target.closest('.model-item');
         if (!modelItem) return;
@@ -382,11 +695,9 @@ function initSettingsEvents() {
         const pid = modelItem.dataset.provider;
         const modelId = modelItem.dataset.modelId;
 
-        // Update selected model for this provider
         if (!currentSettings.providers[pid]) currentSettings.providers[pid] = {};
         currentSettings.providers[pid].selectedModel = modelId;
 
-        // If this provider is the default, also update global default model
         if (currentSettings.defaultProvider === pid) {
             currentSettings.defaultModel = modelId;
         }
@@ -394,9 +705,9 @@ function initSettingsEvents() {
         await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
         renderModels(pid);
         updateDefaultModelDropdown();
+        showSidebarToast(`Model: ${modelId.split('/').pop()}`, 'success');
     });
 
-    // Default provider change
     $('#default-provider').addEventListener('change', async (e) => {
         currentSettings.defaultProvider = e.target.value;
         const pid = e.target.value;
@@ -409,23 +720,21 @@ function initSettingsEvents() {
         updateDefaultModelDropdown();
     });
 
-    // Default model change
     $('#default-model').addEventListener('change', async (e) => {
         currentSettings.defaultModel = e.target.value;
         await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
     });
 
-    // Save defaults button
     $('#save-defaults').addEventListener('click', async () => {
         currentSettings.defaultProvider = $('#default-provider').value;
         currentSettings.defaultModel = $('#default-model').value;
         await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
         const btn = $('#save-defaults');
         btn.textContent = 'Saved ✓';
+        showSidebarToast('Defaults saved', 'success');
         setTimeout(() => { btn.textContent = 'Save Defaults'; }, 1500);
     });
 
-    // Add new prompt
     $('#add-prompt').addEventListener('click', () => {
         editingPromptId = null;
         $('#prompt-modal-title').textContent = 'New System Prompt';
@@ -434,7 +743,6 @@ function initSettingsEvents() {
         $('#prompt-modal').style.display = 'flex';
     });
 
-    // Prompt modal save
     $('#prompt-modal-save').addEventListener('click', async () => {
         const name = $('#prompt-name-input').value.trim();
         const prompt = $('#prompt-text-input').value.trim();
@@ -460,9 +768,9 @@ function initSettingsEvents() {
         await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
         $('#prompt-modal').style.display = 'none';
         renderPrompts();
+        showSidebarToast('Prompt saved', 'success');
     });
 
-    // Prompt modal cancel/close
     $('#prompt-modal-cancel').addEventListener('click', () => { $('#prompt-modal').style.display = 'none'; });
     $('#prompt-modal-close').addEventListener('click', () => { $('#prompt-modal').style.display = 'none'; });
 }
@@ -499,7 +807,6 @@ function renderPrompts() {
     </div>
   `).join('');
 
-    // Prompt actions
     list.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', async () => {
             const { action, promptId } = btn.dataset;
@@ -508,6 +815,7 @@ function renderPrompts() {
                 currentSettings.activePromptId = promptId;
                 await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
                 renderPrompts();
+                showSidebarToast('Prompt activated', 'success');
             } else if (action === 'edit-prompt') {
                 const prompt = currentSettings.systemPrompts.find(p => p.id === promptId);
                 if (!prompt) return;
@@ -546,6 +854,7 @@ $('#modal-copy')?.addEventListener('click', async () => {
     await navigator.clipboard.writeText(text);
     const btn = $('#modal-copy');
     btn.textContent = 'Copied ✓';
+    showSidebarToast('JSON copied', 'success');
     setTimeout(() => { btn.textContent = 'Copy JSON'; }, 1500);
 });
 
@@ -553,6 +862,13 @@ $('#modal-copy')?.addEventListener('click', async () => {
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) {
         e.target.style.display = 'none';
+    }
+});
+
+// Close modals on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        $$('.modal-overlay').forEach(m => { m.style.display = 'none'; });
     }
 });
 
@@ -583,9 +899,7 @@ chrome.storage.onChanged.addListener((changes) => {
     if (changes.reddjson_ai_posts) {
         const activeTab = $('.tab.active')?.dataset?.tab;
         if (activeTab === 'ai-posts') loadAIPosts();
-        // Auto-switch to AI Posts tab when a new post arrives
         if (changes.reddjson_ai_posts.newValue?.length > (changes.reddjson_ai_posts.oldValue?.length || 0)) {
-            // New AI post was added — switch to AI Posts tab
             $$('.tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
             $$('.tab-content').forEach(p => p.classList.remove('active'));
             const aiTab = $('[data-tab="ai-posts"]');
@@ -601,12 +915,14 @@ chrome.storage.onChanged.addListener((changes) => {
 // ============================================================================
 
 async function init() {
+    initTheme();
     initTabs();
     initHistoryEvents();
     initAIPostsEvents();
     initSettingsEvents();
+    initImport();
     await loadHistory();
-    console.log('[ReddJSON] Sidebar v2.0 ready ✓');
+    console.log('[ReddJSON] Sidebar v2.1 ready ✓');
 }
 
 if (document.readyState === 'loading') {
