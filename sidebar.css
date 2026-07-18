@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   ReddJSON Sidebar v2.0 — Premium Light UI
+   ReddJSON Sidebar v2.0 — Premium UI with Dark Mode
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Reset & Variables ── */
@@ -32,6 +32,29 @@
     --transition: .2s ease;
 }
 
+[data-theme="dark"] {
+    --bg-primary: #1A1A1B;
+    --bg-secondary: #272729;
+    --bg-tertiary: #343536;
+    --bg-elevated: #2D2D2F;
+    --text-primary: #D7DADC;
+    --text-secondary: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: #3A3B3C;
+    --border-light: #4A4B4D;
+    --accent: #FF5722;
+    --accent-hover: #FF7043;
+    --accent-light: rgba(255, 87, 34, 0.12);
+    --linkedin: #3B82F6;
+    --linkedin-hover: #60A5FA;
+    --linkedin-light: rgba(59, 130, 246, 0.12);
+    --success: #4ADE80;
+    --danger: #F87171;
+    --danger-light: rgba(248, 113, 113, 0.12);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, .4);
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -61,6 +84,10 @@ body {
     padding: 14px 16px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+}
+
+[data-theme="dark"] .header {
+    background: linear-gradient(135deg, #2D1B14 0%, #1F1410 100%);
 }
 
 .header-brand {
@@ -851,4 +878,124 @@ body {
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin .8s linear infinite;
+}
+
+/* ── Theme Toggle ── */
+.theme-toggle {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.theme-toggle:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-light);
+}
+
+/* ── Sidebar Toast ── */
+.sidebar-toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    padding: 8px 16px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity .25s, transform .25s;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: var(--shadow-md);
+}
+
+.sidebar-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.sidebar-toast.success { background: var(--success); }
+.sidebar-toast.error { background: var(--danger); }
+.sidebar-toast.info { background: var(--accent); }
+
+/* ── Export/Import Buttons ── */
+.toolbar-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.btn-icon-sm {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+    flex-shrink: 0;
+}
+
+.btn-icon-sm:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-light);
+}
+
+/* ── JSON Filter Dropdown ── */
+.json-filter-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    z-index: 100;
+    min-width: 160px;
+    padding: 4px 0;
+}
+
+.json-filter-item {
+    display: block;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.json-filter-item:hover {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.json-filter-item small {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 1px;
 }
