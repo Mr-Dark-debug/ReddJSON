@@ -498,7 +498,43 @@ function exportAsJSON(data, filename) {
     a.href = url;
     a.download = `${filename}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function sanitizeHistoryItem(item) {
+    if (!item || typeof item !== 'object') return null;
+    const postId = typeof item.postId === 'string' ? item.postId.slice(0, 50) : null;
+    if (!postId) return null;
+    return {
+        id: typeof item.id === 'string' ? item.id.slice(0, 80) : `reddjson_${Date.now()}_${postId}`,
+        postId,
+        title: typeof item.title === 'string' ? item.title.slice(0, 300) : 'Untitled Post',
+        subreddit: typeof item.subreddit === 'string' ? item.subreddit.slice(0, 50) : 'unknown',
+        permalink: typeof item.permalink === 'string' ? item.permalink.slice(0, 500) : '',
+        timestamp: typeof item.timestamp === 'number' ? item.timestamp : Date.now(),
+        copiedCount: typeof item.copiedCount === 'number' ? Math.min(item.copiedCount, 10000) : 1,
+        jsonPreview: typeof item.jsonPreview === 'string' ? item.jsonPreview.slice(0, 500) : '',
+        fullJson: item.fullJson && typeof item.fullJson === 'object' ? item.fullJson : null
+    };
+}
+
+function sanitizeAIPostItem(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = typeof item.id === 'string' ? item.id.slice(0, 80) : `aipost_${Date.now()}`;
+    const generatedText = typeof item.generatedText === 'string' ? item.generatedText.slice(0, 20000) : null;
+    if (!generatedText) return null;
+    return {
+        id,
+        permalink: typeof item.permalink === 'string' ? item.permalink.slice(0, 500) : '',
+        redditTitle: typeof item.redditTitle === 'string' ? item.redditTitle.slice(0, 300) : 'Untitled',
+        subreddit: typeof item.subreddit === 'string' ? item.subreddit.slice(0, 50) : 'unknown',
+        generatedText,
+        model: typeof item.model === 'string' ? item.model.slice(0, 100) : 'unknown',
+        provider: typeof item.provider === 'string' ? item.provider.slice(0, 50) : 'unknown',
+        media: Array.isArray(item.media) ? item.media.slice(0, 10).filter(m => m && typeof m.url === 'string') : [],
+        timestamp: typeof item.timestamp === 'number' ? item.timestamp : Date.now(),
+        usage: item.usage && typeof item.usage === 'object' ? item.usage : {}
+    };
 }
 
 let importTarget = null;
@@ -528,12 +564,9 @@ function initImport() {
                 const resp = await chrome.runtime.sendMessage({ action: 'getHistory' });
                 const existing = resp?.history || [];
                 const existingIds = new Set(existing.map(e => e.postId));
-                const newEntries = data.filter(e => e.postId && !existingIds.has(e.postId));
+                const validated = data.map(sanitizeHistoryItem).filter(Boolean);
+                const newEntries = validated.filter(e => !existingIds.has(e.postId));
                 const merged = [...newEntries, ...existing].slice(0, 50);
-                await chrome.runtime.sendMessage({
-                    action: 'saveSettings',
-                    settings: currentSettings
-                });
                 await chrome.storage.local.set({ reddjson_history: merged });
                 loadHistory();
                 showSidebarToast(`Imported ${newEntries.length} new entries`, 'success');
@@ -541,7 +574,8 @@ function initImport() {
                 const resp = await chrome.runtime.sendMessage({ action: 'getAIPosts' });
                 const existing = resp?.posts || [];
                 const existingIds = new Set(existing.map(e => e.id));
-                const newPosts = data.filter(e => e.id && !existingIds.has(e.id));
+                const validated = data.map(sanitizeAIPostItem).filter(Boolean);
+                const newPosts = validated.filter(e => !existingIds.has(e.id));
                 const merged = [...newPosts, ...existing].slice(0, 50);
                 await chrome.storage.local.set({ reddjson_ai_posts: merged });
                 loadAIPosts();

@@ -165,12 +165,12 @@ async function fetchRedditJSON(permalink) {
     const response = await fetch(jsonUrl, {
       method: 'GET',
       headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
-      credentials: 'omit'
+      credentials: 'include' // include session cookies for quarantined / NSFW / authenticated posts
     });
 
     if (!response.ok) {
       const errorMap = {
-        403: 'Private or quarantined subreddit — access denied',
+        403: 'Quarantined or private subreddit — ensure you have accepted any community warning on Reddit',
         404: 'Post not found or deleted',
         429: 'Rate limited — please wait a moment',
         500: 'Reddit server error',
