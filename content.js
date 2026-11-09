@@ -1,14 +1,17 @@
 /**
- * ReddJSON Content Script v2.0
+ * ReddJSON Content Script v2.1
  * ═══════════════════════════════════════════════════════════════════
  * Injects "JSON" + "Post" buttons into Reddit action bars.
- * 
+ *
  * Duplicate prevention:
  *   1. data-reddjson-added attribute on post elements
- *   2. Global Set<string> of processed post IDs
+ *   2. Global Set<string> of processed post IDs (capped at 500)
  *   3. Debounced MutationObserver
  *
- * @version 2.0.0
+ * v2.1: JSON filter menu (post-only vs full), keyboard shortcut
+ * message handling, processedPostIds cap.
+ *
+ * @version 2.1.0
  */
 
 // ============================================================================
@@ -52,8 +55,16 @@ const SELECTORS = {
   shareButtonSelectors: [
     'shreddit-post-share-button',
     'button[aria-label="Share"]',
+    'button[aria-label*="share" i]',
     'faceplate-tracker[source="share"]',
+    'faceplate-tracker[source="post_share"]',
+    'faceplate-tracker[action="share"]',
+    'faceplate-tracker[noun="share"]',
     'button[data-click-id="share"]',
+    'shreddit-post-overflow-menu',
+    'button[aria-label*="More options" i]',
+    'a[slot="comment-button"]',
+    'button[slot="comment-button"]',
   ],
   oldRedditToolbar: '.flat-list.buttons',
   permalinkAttr: 'permalink',
@@ -78,7 +89,8 @@ const CONFIG = {
   observerDebounce: 200,
   redditOrange: '#FF4500',
   linkedinBlue: '#0A66C2',
-  markerAttr: 'data-reddjson-added'
+  markerAttr: 'data-reddjson-added',
+  maxProcessedIds: 500
 };
 
 // ============================================================================
@@ -87,6 +99,15 @@ const CONFIG = {
 
 const processedPostIds = new Set();
 let isProcessing = false;
+
+function trackPostId(id) {
+  if (!id) return;
+  if (processedPostIds.size >= CONFIG.maxProcessedIds) {
+    const first = processedPostIds.values().next().value;
+    processedPostIds.delete(first);
+  }
+  processedPostIds.add(id);
+}
 
 // ============================================================================
 // UTILITIES
@@ -109,6 +130,14 @@ function getPostUniqueKey(postElement) {
     postElement.getAttribute(SELECTORS.permalinkAttr) ||
     postElement.getAttribute(SELECTORS.dataPermalink) ||
     null;
+}
+
+function hasReddJsonButtons(el, actionBar = null) {
+  if (!el) return false;
+  if (el.querySelector?.('.reddjson-buttons-wrapper, .reddjson-action-btn')) return true;
+  if (el.shadowRoot?.querySelector?.('.reddjson-buttons-wrapper, .reddjson-action-btn')) return true;
+  if (actionBar?.container?.querySelector?.('.reddjson-buttons-wrapper, .reddjson-action-btn')) return true;
+  return false;
 }
 
 // ============================================================================
@@ -172,12 +201,17 @@ function showToast(message, type = 'info', nearElement = null) {
 // BUTTON CREATION
 // ============================================================================
 
-function createActionButton(label, icon, accentColor) {
+function createActionButton(label, icon, accentColor, options = {}) {
   const btn = document.createElement('button');
   btn.className = 'reddjson-action-btn';
   btn.type = 'button';
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
+  const ariaLabel = options.ariaLabel || label;
+  btn.setAttribute('aria-label', ariaLabel);
+  btn.title = options.title || label;
+  if (options.hasPopup) {
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+  }
 
   btn.style.cssText = `
     display:inline-flex; align-items:center; gap:6px; padding:0 8px; height:32px;
@@ -229,6 +263,10 @@ function extractNewRedditPostData(el) {
       const fullLink = el.querySelector('a[slot="full-post-link"]');
       if (fullLink) permalink = fullLink.getAttribute('href');
     }
+    // Fallback on single post page
+    if (!permalink && /\/comments\//.test(window.location.pathname)) {
+      permalink = window.location.pathname;
+    }
     if (!permalink) return null;
 
     let postId = el.getAttribute('id');
@@ -240,11 +278,20 @@ function extractNewRedditPostData(el) {
       const m = permalink.match(/comments\/([a-zA-Z0-9]+)/);
       if (m) postId = m[1];
     }
+    if (!postId && /\/comments\/([a-zA-Z0-9]+)/.test(window.location.pathname)) {
+      const m = window.location.pathname.match(/\/comments\/([a-zA-Z0-9]+)/);
+      if (m) postId = m[1];
+    }
 
     let title = '';
     const titleEl = el.querySelector('h1,[slot="title"],a[data-click-id="body"] h3,a.title,[data-testid="post-title"]');
     if (titleEl) title = titleEl.textContent.trim();
     if (!title) title = el.getAttribute('post-title') || '';
+    if (!title && /\/comments\//.test(window.location.pathname)) {
+      const h1 = document.querySelector('h1,[slot="title"],[data-testid="post-title"]');
+      if (h1) title = h1.textContent.trim();
+      if (!title) title = document.title.replace(/ : .*$/, '').replace(/ - Reddit$/, '');
+    }
 
     let subreddit = el.getAttribute('subreddit-prefixed-name')?.replace(/^r\//, '') || '';
     if (!subreddit) {
@@ -254,8 +301,12 @@ function extractNewRedditPostData(el) {
         subreddit = m ? m[1] : subEl.textContent.trim().replace(/^r\//, '');
       }
     }
+    if (!subreddit && /\/r\/([^/]+)/.test(window.location.pathname)) {
+      const m = window.location.pathname.match(/\/r\/([^/]+)/);
+      if (m) subreddit = m[1];
+    }
 
-    return { permalink, postId: postId || 'unknown', title, subreddit };
+    return { permalink, postId: postId || 'unknown', title: title || 'Untitled Post', subreddit: subreddit || 'unknown' };
   } catch (e) {
     console.error('[ReddJSON] Extract error:', e);
     return null;
@@ -299,7 +350,7 @@ function extractOldRedditPostData(el) {
 // CLICK HANDLERS
 // ============================================================================
 
-async function handleJsonCopy(e, btn, postData) {
+async function handleJsonCopy(e, btn, postData, postOnly = false) {
   e.preventDefault();
   e.stopPropagation();
   if (btn.disabled) return;
@@ -310,12 +361,22 @@ async function handleJsonCopy(e, btn, postData) {
   btn.style.cursor = 'wait';
 
   try {
-    const resp = await chrome.runtime.sendMessage({ action: 'fetchJSON', permalink: postData.permalink });
+    const resp = await chrome.runtime.sendMessage({
+      action: 'fetchJSON',
+      permalink: postData.permalink,
+      postOnly
+    });
     if (!resp?.success) { showToast(resp?.error || 'Fetch failed', 'error', btn); return; }
 
     const pretty = JSON.stringify(resp.data, null, 2);
     await navigator.clipboard.writeText(pretty);
-    showToast('JSON copied!', 'success', btn);
+    const labelSpan = btn.querySelector('span');
+    if (labelSpan) {
+      const origLabel = labelSpan.textContent;
+      labelSpan.textContent = '✓ Copied!';
+      setTimeout(() => { if (labelSpan) labelSpan.textContent = origLabel; }, 1500);
+    }
+    showToast(postOnly ? 'Post JSON copied (no comments)!' : 'JSON copied!', 'success', btn);
 
     chrome.runtime.sendMessage({
       action: 'addToHistory',
@@ -332,7 +393,7 @@ async function handleJsonCopy(e, btn, postData) {
   }
 }
 
-async function handleGenerateLI(e, btn, postData) {
+async function handleGenerateLI(e, btn, postData, promptId = null) {
   e.preventDefault();
   e.stopPropagation();
   if (btn.disabled) return;
@@ -361,7 +422,8 @@ async function handleGenerateLI(e, btn, postData) {
       permalink: postData.permalink,
       title: postData.title,
       subreddit: postData.subreddit,
-      postId: postData.postId
+      postId: postData.postId,
+      promptId: promptId
     });
 
     if (!resp?.success) {
@@ -388,61 +450,66 @@ async function handleGenerateLI(e, btn, postData) {
 // ============================================================================
 
 function findActionBar(postElement) {
-  // Strategy 1: find a Share button in the post
+  if (!postElement) return null;
+
+  // Strategy 1: find a Share or action button in light DOM of post
   for (const sel of SELECTORS.shareButtonSelectors) {
     const shareBtn = postElement.querySelector(sel);
-    if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
+    if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn, inShadow: false };
   }
+
   // Strategy 2: check shadowRoot
   if (postElement.shadowRoot) {
     for (const sel of SELECTORS.shareButtonSelectors) {
       const shareBtn = postElement.shadowRoot.querySelector(sel);
-      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
+      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn, inShadow: true };
+    }
+    // Check slots or toolbars inside shadowRoot
+    const shadowToolbar = postElement.shadowRoot.querySelector(
+      'slot[name="action-bar"], slot[name="share-button"], slot[name="credit-bar"], [role="toolbar"], .action-row'
+    );
+    if (shadowToolbar) {
+      return { container: shadowToolbar.parentElement || postElement.shadowRoot, shareButton: shadowToolbar, inShadow: true };
     }
   }
-  // Strategy 3: generic button text match
+
+  // Strategy 3: generic button text match in post
   const allBtns = postElement.querySelectorAll('button');
   for (const b of allBtns) {
-    if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
-      return { container: b.parentElement, shareButton: b };
+    const text = b.textContent?.trim() || '';
+    const label = b.getAttribute('aria-label') || '';
+    if (text === 'Share' || label.toLowerCase().includes('share')) {
+      return { container: b.parentElement, shareButton: b, inShadow: false };
     }
   }
-  // Strategy 4: find [data-testid="action-row"] (single post pages)
-  const actionRow = postElement.querySelector('[data-testid="action-row"]');
+
+  // Strategy 4: find action row or toolbar
+  const actionRow = postElement.querySelector('[data-testid="action-row"], [slot="action-bar"], [slot="credit-bar"], rpl-action-bar');
   if (actionRow) {
-    // Try to find share button within the action row
     for (const sel of SELECTORS.shareButtonSelectors) {
       const shareBtn = actionRow.querySelector(sel);
-      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
+      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn, inShadow: false };
     }
-    const arBtns = actionRow.querySelectorAll('button');
-    for (const b of arBtns) {
-      if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
-        return { container: b.parentElement, shareButton: b };
-      }
-    }
-    // If no share button found in action-row, append to the row itself
-    // Use the last child as the anchor
     const lastChild = actionRow.lastElementChild;
-    if (lastChild) return { container: actionRow, shareButton: lastChild };
-    return { container: actionRow, shareButton: null };
+    return { container: actionRow, shareButton: lastChild, inShadow: false };
   }
-  // Strategy 5: search entire page for the action-row (in case postElement doesn't contain it)
-  const pageActionRow = document.querySelector('[data-testid="action-row"]');
-  if (pageActionRow && !pageActionRow.querySelector('.reddjson-action-btn')) {
-    for (const sel of SELECTORS.shareButtonSelectors) {
-      const shareBtn = pageActionRow.querySelector(sel);
-      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn };
+
+  // Strategy 5: on single post page, search document for post's action bar
+  if (/\/comments\//.test(window.location.pathname)) {
+    const pageShareBtn = document.querySelector('shreddit-post-share-button, shreddit-post-overflow-menu');
+    if (pageShareBtn && !pageShareBtn.closest('shreddit-comment')) {
+      return { container: pageShareBtn.parentElement, shareButton: pageShareBtn, inShadow: false };
     }
-    const arBtns = pageActionRow.querySelectorAll('button');
-    for (const b of arBtns) {
-      if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
-        return { container: b.parentElement, shareButton: b };
-      }
+    const pageActionRow = document.querySelector('[data-testid="action-row"]');
+    if (pageActionRow && !pageActionRow.querySelector('.reddjson-action-btn')) {
+      const lastChild = pageActionRow.lastElementChild;
+      return { container: pageActionRow, shareButton: lastChild, inShadow: false };
     }
-    const lastChild = pageActionRow.lastElementChild;
-    if (lastChild) return { container: pageActionRow, shareButton: lastChild };
+    if (postElement.tagName?.toLowerCase() === 'shreddit-post') {
+      return { container: postElement, shareButton: null, forceSlot: 'action-bar', inShadow: false };
+    }
   }
+
   return null;
 }
 
@@ -451,12 +518,10 @@ function findActionBar(postElement) {
 // ============================================================================
 
 function injectButtonsToNewRedditPost(postElement) {
-  // Guard 1: data attribute
-  if (postElement.hasAttribute(CONFIG.markerAttr)) return;
+  if (!postElement) return;
 
-  // Guard 2: global Set
-  const uniqueKey = getPostUniqueKey(postElement);
-  if (uniqueKey && processedPostIds.has(uniqueKey)) {
+  // Check if buttons are already in this post element
+  if (hasReddJsonButtons(postElement)) {
     postElement.setAttribute(CONFIG.markerAttr, 'true');
     return;
   }
@@ -465,49 +530,92 @@ function injectButtonsToNewRedditPost(postElement) {
   if (!postData?.permalink) return;
 
   const actionBar = findActionBar(postElement);
-  if (!actionBar) {
+  if (!actionBar || !actionBar.container) {
     console.debug('[ReddJSON] Action bar not found, will retry');
     return;
   }
 
-  // Double-check: if buttons already exist in this action bar, skip
-  if (actionBar.container.querySelector('.reddjson-action-btn')) {
+  // Double-check: if buttons already exist in this action bar container, skip
+  if (actionBar.container.querySelector?.('.reddjson-action-btn') ||
+      actionBar.container.querySelector?.('.reddjson-buttons-wrapper')) {
     postElement.setAttribute(CONFIG.markerAttr, 'true');
-    if (uniqueKey) processedPostIds.add(uniqueKey);
     return;
   }
 
-  // Create JSON button
-  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
-  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+  // Create JSON button with right-click menu for post-only option
+  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange, {
+    ariaLabel: 'Copy Reddit post JSON (Right-click for options)',
+    title: 'Copy JSON (Right-click for options)',
+    hasPopup: true
+  });
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData, false));
+  jsonBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    jsonBtn.setAttribute('aria-expanded', 'true');
+    showJsonFilterMenu(e, jsonBtn, postData);
+  });
 
   // Create LinkedIn Post button
-  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue, {
+    ariaLabel: 'Generate LinkedIn post (Right-click to select template)',
+    title: 'Generate LinkedIn post (Right-click to select template)',
+    hasPopup: true
+  });
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+  liBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    liBtn.setAttribute('aria-expanded', 'true');
+    showPromptTemplateMenu(e, liBtn, postData);
+  });
 
   // Wrap in a container to keep them together
   const wrapper = document.createElement('span');
   wrapper.className = 'reddjson-buttons-wrapper';
-  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;position:relative;z-index:10;';
+  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;position:relative;z-index:10;vertical-align:middle;';
   wrapper.appendChild(jsonBtn);
   wrapper.appendChild(liBtn);
 
-  if (actionBar.shareButton) {
+  // Web Component Slot Assignment:
+  // If wrapper is placed inside a custom element with Shadow DOM (like shreddit-post),
+  // it must have the appropriate slot attribute to be rendered.
+  let slotName = actionBar.forceSlot || null;
+  if (!slotName && actionBar.shareButton?.getAttribute) {
+    slotName = actionBar.shareButton.getAttribute('slot');
+  }
+  if (!slotName && actionBar.container?.getAttribute) {
+    slotName = actionBar.container.getAttribute('slot');
+  }
+  const isDirectChildOfPost = (actionBar.shareButton?.parentElement === postElement) ||
+                              (actionBar.container === postElement);
+  if (!slotName && isDirectChildOfPost) {
+    const candidates = ['action-bar', 'share-button', 'credit-bar', 'post-overflow-menu'];
+    for (const c of candidates) {
+      if (postElement.querySelector(`[slot="${c}"]`)) { slotName = c; break; }
+      if (postElement.shadowRoot?.querySelector(`slot[name="${c}"]`)) { slotName = c; break; }
+    }
+    if (!slotName) slotName = 'action-bar';
+  }
+
+  if (slotName && (isDirectChildOfPost || !actionBar.inShadow)) {
+    wrapper.setAttribute('slot', slotName);
+  }
+
+  if (actionBar.shareButton && actionBar.shareButton.parentNode) {
     actionBar.shareButton.after(wrapper);
-  } else {
+  } else if (actionBar.container) {
     actionBar.container.appendChild(wrapper);
   }
 
   // Mark as processed
   postElement.setAttribute(CONFIG.markerAttr, 'true');
-  if (uniqueKey) processedPostIds.add(uniqueKey);
+  const uniqueKey = getPostUniqueKey(postElement);
+  if (uniqueKey) trackPostId(uniqueKey);
 }
 
 function injectButtonsToOldRedditPost(postElement) {
-  if (postElement.hasAttribute(CONFIG.markerAttr)) return;
-
-  const uniqueKey = getPostUniqueKey(postElement);
-  if (uniqueKey && processedPostIds.has(uniqueKey)) {
+  if (hasReddJsonButtons(postElement)) {
     postElement.setAttribute(CONFIG.markerAttr, 'true');
     return;
   }
@@ -518,28 +626,49 @@ function injectButtonsToOldRedditPost(postElement) {
   const toolbar = postElement.querySelector(SELECTORS.oldRedditToolbar);
   if (!toolbar) return;
 
-  if (toolbar.querySelector('.reddjson-action-btn')) {
+  if (toolbar.querySelector('.reddjson-action-btn') || toolbar.querySelector('.reddjson-buttons-wrapper')) {
     postElement.setAttribute(CONFIG.markerAttr, 'true');
-    if (uniqueKey) processedPostIds.add(uniqueKey);
     return;
   }
 
-  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
+  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange, {
+    ariaLabel: 'Copy Reddit post JSON (Right-click for options)',
+    title: 'Copy JSON (Right-click for options)',
+    hasPopup: true
+  });
   jsonBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
-  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData, false));
+  jsonBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    jsonBtn.setAttribute('aria-expanded', 'true');
+    showJsonFilterMenu(e, jsonBtn, postData);
+  });
 
-  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue, {
+    ariaLabel: 'Generate LinkedIn post (Right-click to select template)',
+    title: 'Generate LinkedIn post (Right-click to select template)',
+    hasPopup: true
+  });
   liBtn.style.cssText += 'border:1px solid #c6c6c6;padding:4px 8px;border-radius:3px;font-size:11px;height:auto;';
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+  liBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    liBtn.setAttribute('aria-expanded', 'true');
+    showPromptTemplateMenu(e, liBtn, postData);
+  });
 
   const li = document.createElement('li');
+  li.className = 'reddjson-buttons-wrapper';
   li.style.display = 'inline-block';
   li.appendChild(jsonBtn);
   li.appendChild(liBtn);
   toolbar.appendChild(li);
 
   postElement.setAttribute(CONFIG.markerAttr, 'true');
-  if (uniqueKey) processedPostIds.add(uniqueKey);
+  const uniqueKey = getPostUniqueKey(postElement);
+  if (uniqueKey) trackPostId(uniqueKey);
 }
 
 // ============================================================================
@@ -553,37 +682,34 @@ function processAllPosts() {
     const isOld = window.location.hostname.includes('old.reddit.com');
     if (isOld) {
       document.querySelectorAll(SELECTORS.oldRedditThing).forEach(p => {
-        if (!p.hasAttribute(CONFIG.markerAttr)) injectButtonsToOldRedditPost(p);
+        if (!hasReddJsonButtons(p)) injectButtonsToOldRedditPost(p);
       });
     } else {
       // Feed posts
       document.querySelectorAll(SELECTORS.shredditPost).forEach(p => {
-        if (!p.hasAttribute(CONFIG.markerAttr)) injectButtonsToNewRedditPost(p);
+        if (!hasReddJsonButtons(p)) injectButtonsToNewRedditPost(p);
       });
 
-      // Single post page — also check for action-row without a parent shreddit-post
-      // On individual post pages, the shreddit-post may be deeply nested
-      // Also handle the case where action-row exists but has no buttons yet
+      // Single post page handling
       const isSinglePostPage = /\/comments\//.test(window.location.pathname);
       if (isSinglePostPage) {
-        const actionRows = document.querySelectorAll('[data-testid="action-row"]');
-        actionRows.forEach(row => {
-          if (row.querySelector('.reddjson-action-btn')) return; // already injected
-
-          // Walk up to find the closest shreddit-post
-          let postEl = row.closest('shreddit-post');
-          if (!postEl) {
-            // On single post pages, there might not be a shreddit-post wrapper
-            // Use the action-row's parent or create a virtual post reference
-            postEl = row.closest('[data-testid="post-container"]') || row.closest('article') || row.parentElement;
+        const singlePost = document.querySelector('shreddit-post');
+        if (singlePost) {
+          if (!hasReddJsonButtons(singlePost)) {
+            injectButtonsToNewRedditPost(singlePost);
           }
-          if (postEl && !postEl.hasAttribute(CONFIG.markerAttr)) {
-            injectButtonsToNewRedditPost(postEl);
-          } else if (!row.querySelector('.reddjson-action-btn')) {
-            // Last resort: extract post data from the URL and inject directly
-            injectButtonsToActionRow(row);
-          }
-        });
+        } else {
+          // Fallback if shreddit-post is not rendered (quarantined interstitial, custom shell, etc.)
+          const containers = document.querySelectorAll(
+            '[data-testid="post-container"], article, [data-testid="action-row"], [slot="action-bar"], rpl-action-bar'
+          );
+          containers.forEach(container => {
+            if (container.closest('shreddit-comment')) return; // ignore comments
+            if (!hasReddJsonButtons(container)) {
+              injectButtonsToActionRow(container);
+            }
+          });
+        }
       }
     }
   } catch (e) {
@@ -598,17 +724,13 @@ function processAllPosts() {
  * when no parent shreddit-post element is found
  */
 function injectButtonsToActionRow(actionRow) {
-  if (actionRow.querySelector('.reddjson-action-btn')) return;
+  if (!actionRow || hasReddJsonButtons(actionRow)) return;
 
-  // Extract post data from URL
   const urlMatch = window.location.pathname.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
-  if (!urlMatch) return;
-
-  const subreddit = urlMatch[1];
-  const postId = urlMatch[2];
   const permalink = window.location.pathname;
+  const subreddit = urlMatch ? urlMatch[1] : (window.location.pathname.match(/\/r\/([^/]+)/)?.[1] || 'unknown');
+  const postId = urlMatch ? urlMatch[2] : (window.location.pathname.match(/comments\/([a-zA-Z0-9]+)/)?.[1] || 'unknown');
 
-  // Get title from page
   let title = '';
   const titleEl = document.querySelector('h1,[slot="title"],[data-testid="post-title"]');
   if (titleEl) title = titleEl.textContent.trim();
@@ -616,25 +738,44 @@ function injectButtonsToActionRow(actionRow) {
 
   const postData = { permalink, postId, title, subreddit };
 
-  // Create buttons
-  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange);
-  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData));
+  const jsonBtn = createActionButton('JSON', REDDJSON_SVG, CONFIG.redditOrange, {
+    ariaLabel: 'Copy Reddit post JSON (Right-click for options)',
+    title: 'Copy JSON (Right-click for options)',
+    hasPopup: true
+  });
+  jsonBtn.addEventListener('click', (e) => handleJsonCopy(e, jsonBtn, postData, false));
+  jsonBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    jsonBtn.setAttribute('aria-expanded', 'true');
+    showJsonFilterMenu(e, jsonBtn, postData);
+  });
 
-  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue);
+  const liBtn = createActionButton('Post', LINKEDIN_ICON, CONFIG.linkedinBlue, {
+    ariaLabel: 'Generate LinkedIn post (Right-click to select template)',
+    title: 'Generate LinkedIn post (Right-click to select template)',
+    hasPopup: true
+  });
   liBtn.addEventListener('click', (e) => handleGenerateLI(e, liBtn, postData));
+  liBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    liBtn.setAttribute('aria-expanded', 'true');
+    showPromptTemplateMenu(e, liBtn, postData);
+  });
 
   const wrapper = document.createElement('span');
   wrapper.className = 'reddjson-buttons-wrapper';
-  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;position:relative;z-index:10;';
+  wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:2px;position:relative;z-index:10;vertical-align:middle;';
   wrapper.appendChild(jsonBtn);
   wrapper.appendChild(liBtn);
 
-  // Find share button to insert after, or append to end
   let inserted = false;
   for (const sel of SELECTORS.shareButtonSelectors) {
     const shareBtn = actionRow.querySelector(sel);
     if (shareBtn) {
-      shareBtn.parentElement?.insertBefore(wrapper, shareBtn.nextSibling) || shareBtn.after(wrapper);
+      if (shareBtn.getAttribute('slot')) wrapper.setAttribute('slot', shareBtn.getAttribute('slot'));
+      shareBtn.after(wrapper);
       inserted = true;
       break;
     }
@@ -642,7 +783,7 @@ function injectButtonsToActionRow(actionRow) {
   if (!inserted) {
     const arBtns = actionRow.querySelectorAll('button');
     for (const b of arBtns) {
-      if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.includes('Share')) {
+      if (b.textContent?.trim() === 'Share' || b.getAttribute('aria-label')?.toLowerCase().includes('share')) {
         b.after(wrapper);
         inserted = true;
         break;
@@ -652,6 +793,144 @@ function injectButtonsToActionRow(actionRow) {
   if (!inserted) {
     actionRow.appendChild(wrapper);
   }
+}
+
+// ============================================================================
+// JSON FILTER CONTEXT MENU
+// ============================================================================
+
+function showJsonFilterMenu(e, btn, postData) {
+  document.querySelectorAll('.reddjson-filter-menu').forEach(m => m.remove());
+
+  const menu = document.createElement('div');
+  menu.className = 'reddjson-filter-menu';
+  menu.style.cssText = `
+    position:fixed; z-index:2147483647; background:#fff; border:1px solid #e0e0e0;
+    border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.15); padding:4px 0;
+    min-width:180px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  `;
+
+  const options = [
+    { label: 'Full Thread JSON', desc: 'Post + all comments', postOnly: false },
+    { label: 'Post Only JSON', desc: 'No comments (smaller)', postOnly: true },
+  ];
+
+  options.forEach(opt => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.style.cssText = `
+      display:block; width:100%; padding:8px 14px; border:none; background:none;
+      text-align:left; cursor:pointer; font-size:12px; color:#1a1a1b;
+      font-family:inherit; transition:background .15s;
+    `;
+    item.innerHTML = `<strong>${opt.label}</strong><br><span style="font-size:10px;color:#878a8c">${opt.desc}</span>`;
+    item.addEventListener('mouseenter', () => { item.style.background = 'rgba(255,69,0,.06)'; });
+    item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+    item.addEventListener('click', (ev) => {
+      menu.remove();
+      handleJsonCopy(ev, btn, postData, opt.postOnly);
+    });
+    menu.appendChild(item);
+  });
+
+  menu.style.top = `${e.clientY}px`;
+  menu.style.left = `${e.clientX}px`;
+  document.body.appendChild(menu);
+
+  const closeMenu = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('click', closeMenu, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeMenu, true), 0);
+}
+
+// ============================================================================
+// PROMPT TEMPLATES CONTEXT MENU
+// ============================================================================
+
+async function showPromptTemplateMenu(e, btn, postData) {
+  document.querySelectorAll('.reddjson-filter-menu').forEach(m => m.remove());
+
+  try {
+    const settingsResp = await chrome.runtime.sendMessage({ action: 'getSettings' });
+    const settings = settingsResp?.settings;
+    const prompts = settings?.systemPrompts || [];
+
+    if (prompts.length === 0) {
+      showToast('No templates found', 'error', btn);
+      return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'reddjson-filter-menu';
+    menu.style.cssText = `
+      position:fixed; z-index:2147483647; background:#fff; border:1px solid #e0e0e0;
+      border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.15); padding:4px 0;
+      min-width:220px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    `;
+
+    const activePromptId = settings.activePromptId || 'default';
+
+    prompts.forEach(p => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.style.cssText = `
+        display:block; width:100%; padding:8px 14px; border:none; background:none;
+        text-align:left; cursor:pointer; font-size:12px; color:#1a1a1b;
+        font-family:inherit; transition:background .15s; line-height:1.4;
+      `;
+      const isActive = p.id === activePromptId;
+      const previewText = p.prompt ? p.prompt.substring(0, 45).replace(/\n/g, ' ') : '';
+      item.innerHTML = `<strong>${isActive ? '★ ' : ''}${escapeHtml(p.name)}</strong><br><span style="font-size:10px;color:#878a8c">${escapeHtml(previewText)}...</span>`;
+      item.addEventListener('mouseenter', () => { item.style.background = 'rgba(10,102,194,.06)'; });
+      item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+      item.addEventListener('click', (ev) => {
+        menu.remove();
+        handleGenerateLI(ev, btn, postData, p.id);
+      });
+      menu.appendChild(item);
+    });
+
+    menu.style.top = `${e.clientY}px`;
+    menu.style.left = `${e.clientX}px`;
+    document.body.appendChild(menu);
+
+    const closeMenu = (ev) => {
+      if (!menu.contains(ev.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu, true), 0);
+  } catch (err) {
+    showToast('Failed to load templates', 'error', btn);
+  }
+}
+
+// ============================================================================
+// MESSAGE LISTENER — keyboard shortcut support
+// ============================================================================
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'showToast') {
+    showToast(message.message, message.type || 'info');
+  } else if (message.action === 'copyToClipboard') {
+    navigator.clipboard.writeText(message.text).then(() => {
+      showToast('JSON copied!', 'success');
+    }).catch(() => {
+      showToast('Copy failed — focus this tab', 'error');
+    });
+  }
+});
+
+// ============================================================================
+// MUTATION OBSERVER
+// ============================================================================
+
+function schedulePostProcessing(delays = [50, 300, 800, 1500, 2500]) {
+  delays.forEach(ms => setTimeout(processAllPosts, ms));
 }
 
 // ============================================================================
@@ -667,9 +946,21 @@ function startObserver() {
       for (const n of m.addedNodes) {
         if (n.nodeType !== 1) continue;
         const tag = n.tagName?.toLowerCase();
-        if (tag === 'shreddit-post' || n.classList?.contains('thing') ||
-          n.querySelector?.(SELECTORS.shredditPost) || n.querySelector?.(SELECTORS.oldRedditThing) ||
-          n.matches?.('[data-testid="action-row"]') || n.querySelector?.('[data-testid="action-row"]')) {
+        if (
+          tag === 'shreddit-post' ||
+          tag === 'shreddit-post-share-button' ||
+          tag === 'shreddit-post-overflow-menu' ||
+          tag === 'shreddit-async-loader' ||
+          tag === 'rpl-action-bar' ||
+          n.classList?.contains('thing') ||
+          n.hasAttribute?.('slot') ||
+          n.querySelector?.(SELECTORS.shredditPost) ||
+          n.querySelector?.('shreddit-post-share-button') ||
+          n.querySelector?.('[slot*="action"]') ||
+          n.querySelector?.('[slot*="share"]') ||
+          n.querySelector?.('[data-testid="action-row"]') ||
+          (n.closest && n.closest('shreddit-post'))
+        ) {
           shouldRun = true;
           break;
         }
@@ -679,13 +970,8 @@ function startObserver() {
     if (shouldRun) dProc();
   });
 
-  let target = document.body;
-  for (const sel of SELECTORS.feedContainers) {
-    const c = document.querySelector(sel);
-    if (c) { target = c; break; }
-  }
-
-  observer.observe(target, { childList: true, subtree: true });
+  // Always observe document.body so modals, overlays, and SPA view changes are caught
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // ============================================================================
@@ -706,28 +992,71 @@ function injectStyles() {
 }
 
 // ============================================================================
+// INTERSTITIAL & SPA NAVIGATION (Bolt ⚡ performance optimization)
+// ============================================================================
+
+// Interstitial / Quarantined opt-in click listener
+document.addEventListener('click', (e) => {
+  const target = e.target;
+  if (!target) return;
+  const btn = target.closest('button, [role="button"], faceplate-tracker');
+  if (btn) {
+    const text = (btn.textContent || '').toLowerCase();
+    if (
+      text.includes('continue') ||
+      text.includes('view') ||
+      text.includes('agree') ||
+      text.includes('understand') ||
+      text.includes('yes')
+    ) {
+      schedulePostProcessing([200, 600, 1200, 2500]);
+    }
+  }
+}, true);
+
+// Lightweight SPA navigation detection:
+// Replaces expensive full-document MutationObserver with History API hooks + popstate
+let lastUrl = location.href;
+
+function onUrlChange() {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    schedulePostProcessing([50, 250, 600, 1200, 2500]);
+  }
+}
+
+// Hook History API
+const origPushState = history.pushState;
+history.pushState = function(...args) {
+  const ret = origPushState.apply(this, args);
+  onUrlChange();
+  return ret;
+};
+
+const origReplaceState = history.replaceState;
+history.replaceState = function(...args) {
+  const ret = origReplaceState.apply(this, args);
+  onUrlChange();
+  return ret;
+};
+
+window.addEventListener('popstate', onUrlChange);
+
+// Lightweight fallback polling (350ms) for edge cases
+setInterval(onUrlChange, 350);
+
+// ============================================================================
 // INIT
 // ============================================================================
 
 function init() {
-  console.log('[ReddJSON] Content v2.0 initializing…');
+  console.log('[ReddJSON] Content v2.1 initializing…');
   injectStyles();
   processAllPosts();
   startObserver();
-  setTimeout(processAllPosts, 1000);
-  setTimeout(processAllPosts, 3000);
-  console.log('[ReddJSON] Content v2.0 ready ✓');
+  schedulePostProcessing([100, 500, 1200, 2500]);
+  console.log('[ReddJSON] Content v2.1 ready ✓');
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else setTimeout(init, 150);
-
-// SPA navigation detection
-let lastUrl = location.href;
-new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    // Don't clear processedPostIds — prevents re-injection on back-navigation
-    setTimeout(processAllPosts, 500);
-  }
-}).observe(document, { subtree: true, childList: true });
