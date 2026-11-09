@@ -6,13 +6,16 @@
  */
 
 /* ── Button container adjustments ── */
-.reddjson-button-wrapper {
+.reddjson-button-wrapper,
+.reddjson-buttons-wrapper {
   display: inline-flex;
   align-items: center;
+  vertical-align: middle;
 }
 
 /* ── Ensure button doesn't break Reddit's layout ── */
-shreddit-post .reddjson-button {
+shreddit-post .reddjson-button,
+shreddit-post .reddjson-action-btn {
   flex-shrink: 0;
 }
 
@@ -28,20 +31,24 @@ shreddit-post .reddjson-button {
 }
 
 /* ── Button micro-interactions ── */
-.reddjson-button {
+.reddjson-button,
+.reddjson-action-btn {
   transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease !important;
 }
 
-.reddjson-button:hover {
+.reddjson-button:hover,
+.reddjson-action-btn:hover {
   transform: translateY(-1px);
 }
 
-.reddjson-button:active {
+.reddjson-button:active,
+.reddjson-action-btn:active {
   transform: translateY(0) scale(0.96) !important;
 }
 
 /* ── Loading state ── */
-.reddjson-button:disabled {
+.reddjson-button:disabled,
+.reddjson-action-btn:disabled {
   opacity: 0.6;
   cursor: wait !important;
   pointer-events: none;
