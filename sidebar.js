@@ -1,5 +1,5 @@
 /**
- * ReddJSON Sidebar v2.1
+ * ReddJSON Sidebar v2.2
  * ═══════════════════════════════════════════════════════════════════
  * 3-tab UI: History | AI Posts | Settings
  *
@@ -8,6 +8,8 @@
  *
  * v2.1 additions: dark mode, export/import, debounced search,
  * keyboard shortcuts, sidebar toasts, storage optimization.
+ * v2.2 additions: human-score badges + 5-check report panels on AI posts,
+ * Writing settings (voice profile, auto-humanize toggle).
  */
 
 // ============================================================================
@@ -399,6 +401,17 @@ function renderAIPosts() {
             m.url ? `<img src="${escapeHtml(m.url)}" alt="media" loading="lazy" onerror="this.style.display='none'">` : ''
         ).join('');
 
+        const hasScore = typeof p.humanScore === 'number';
+        const badge = hasScore ? `
+        <button class="score-badge verdict-${(p.verdict || 'REVIEW').toLowerCase()}"
+                data-action="toggle-report" data-id="${escapeHtml(p.id)}"
+                title="Human score — 5-check AI-fingerprint panel (click for the full report)">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px"><path d="M20 6L9 17l-5-5"/></svg>
+          ${Math.round(p.humanScore)} · ${escapeHtml(p.verdict || 'REVIEW')}
+        </button>` : '';
+
+        const reportHtml = hasScore ? buildHumanReportHtml(p) : '';
+
         return `
       <div class="entry" data-id="${escapeHtml(p.id)}">
         <div class="entry-header">
@@ -408,6 +421,7 @@ function renderAIPosts() {
           <span class="badge">r/${escapeHtml(p.subreddit)}</span>
           <span>${timeAgo(p.timestamp)}</span>
           <span>${escapeHtml(p.model)}</span>
+          ${badge}
         </div>
         ${mediaHtml ? `<div class="ai-post-media">${mediaHtml}</div>` : ''}
         <div class="ai-post-text" data-action="toggle-expand">${escapeHtml(p.generatedText)}</div>
@@ -420,9 +434,85 @@ function renderAIPosts() {
           </button>
           <button class="btn-ghost" data-action="delete-ai" data-id="${escapeHtml(p.id)}">🗑</button>
         </div>
+        ${reportHtml}
       </div>
     `;
     }).join('');
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Human-score report — rendered from humanReport data computed in background.js
+   (lib/humanizer.js port of the /li-human skill: humanize.py + detect.py)
+   ──────────────────────────────────────────────────────────────────────────── */
+const HR_CHECKS = ['BURSTINESS', 'SPECIFICITY', 'SLOP DENSITY', 'FINGERPRINT', 'VOICE'];
+
+function buildHumanReportHtml(p) {
+    const r = p.humanReport || {};
+    const checks = r.checks || {};
+
+    const checkRows = HR_CHECKS.filter(n => typeof checks[n]?.score === 'number').map(n => {
+        const score = checks[n].score;
+        return `
+        <div class="check-row">
+          <span class="check-name">${n}</span>
+          <div class="check-bar"><div class="check-fill" style="width:${score}%"></div></div>
+          <span class="check-score">${score.toFixed(1)}</span>
+        </div>
+        <div class="check-detail">${escapeHtml(checks[n].detail || '')}</div>`;
+    }).join('');
+
+    const invisibleCount = (r.invisible || []).reduce((s, h) => s + h.count, 0);
+    const typoCount = (r.typographic || []).reduce((s, h) => s + h.count, 0);
+    const slopTotal = (r.lexical || []).reduce((s, h) => s + h.count, 0);
+    const structures = r.structures || [];
+
+    const strippedLine = (invisibleCount || typoCount)
+        ? `<div class="hr-summary">${invisibleCount} invisible character${invisibleCount === 1 ? '' : 's'} and ${typoCount} typographic artifact${typoCount === 1 ? '' : 's'} stripped automatically.</div>`
+        : '';
+
+    const slopHits = slopTotal === 0 ? '' : `
+        <div class="hr-section-title">Slop lexicon (${slopTotal} hit${slopTotal === 1 ? '' : 's'})</div>
+        ${r.lexical.map(h => `
+        <div class="hr-hit">
+          <span class="hr-from">${escapeHtml(h.find)}${h.count > 1 ? ` ×${h.count}` : ''}</span>
+          <span class="hr-arrow">→</span>
+          <span class="hr-to">${escapeHtml(h.replace || '(deleted)')}</span>
+          ${h.family ? `<span class="hr-family">${escapeHtml(h.family)}</span>` : ''}
+        </div>`).join('')}`;
+
+    const structureFlags = structures.length === 0 ? '' : `
+        <div class="hr-section-title">Structural tells — rewrite these yourself</div>
+        ${structures.map(s => `
+        <div class="hr-tell">
+          <div class="hr-tell-name">${escapeHtml(s.name)}${s.count > 1 ? ` ×${s.count}` : ''}</div>
+          <div class="hr-fix">${escapeHtml(s.fix || '')}</div>
+        </div>`).join('')}`;
+
+    const verdictCopy = {
+        PASS: 'Reads human. Safe to post.',
+        REVIEW: 'Worth a 30-second personal rewrite before posting.',
+        FLAGGED: 'Still reads machine-written. Rewrite the flagged parts before posting.'
+    }[p.verdict] || '';
+
+    const weakestLine = (p.verdict !== 'PASS' && p.weakest)
+        ? `<div class="hr-weakest">Weakest signal: <strong>${escapeHtml(p.weakest)}</strong>. Fix that first.</div>`
+        : '';
+
+    return `
+      <div class="human-report" style="display:none">
+        <div class="hr-head">
+          <span class="hr-label">HUMAN SCORE</span>
+          <span class="hr-overall">${Number(p.humanScore).toFixed(1)}</span>
+          <span class="hr-verdict verdict-${(p.verdict || 'REVIEW').toLowerCase()}">${escapeHtml(p.verdict || 'REVIEW')}</span>
+        </div>
+        <div class="hr-note">${verdictCopy}</div>
+        ${weakestLine}
+        ${checkRows}
+        ${strippedLine}
+        ${slopHits}
+        ${structureFlags}
+        <div class="hr-foot">Local heuristics — not a commercial AI detector. Structural tells are never auto-rewritten.</div>
+      </div>`;
 }
 
 function initAIPostsEvents() {
@@ -438,6 +528,11 @@ function initAIPostsEvents() {
 
         const post = cachedAIPosts.find(p => p.id === id);
         if (!post && action !== 'delete-ai') return;
+
+        if (action === 'toggle-report') {
+            toggleHumanReport(btn);
+            return;
+        }
 
         if (action === 'copy-text') {
             await navigator.clipboard.writeText(post.generatedText);
@@ -487,6 +582,14 @@ function initAIPostsEvents() {
     });
 }
 
+function toggleHumanReport(btn) {
+    const card = btn.closest('.entry');
+    const report = card?.querySelector('.human-report');
+    if (!report) return;
+    report.style.display = report.style.display === 'none' ? 'block' : 'none';
+    btn.classList.toggle('open');
+}
+
 // ============================================================================
 // EXPORT / IMPORT
 // ============================================================================
@@ -533,7 +636,12 @@ function sanitizeAIPostItem(item) {
         provider: typeof item.provider === 'string' ? item.provider.slice(0, 50) : 'unknown',
         media: Array.isArray(item.media) ? item.media.slice(0, 10).filter(m => m && typeof m.url === 'string') : [],
         timestamp: typeof item.timestamp === 'number' ? item.timestamp : Date.now(),
-        usage: item.usage && typeof item.usage === 'object' ? item.usage : {}
+        usage: item.usage && typeof item.usage === 'object' ? item.usage : {},
+        humanized: item.humanized === true,
+        humanScore: typeof item.humanScore === 'number' ? item.humanScore : null,
+        verdict: ['PASS', 'REVIEW', 'FLAGGED'].includes(item.verdict) ? item.verdict : null,
+        weakest: typeof item.weakest === 'string' ? item.weakest.slice(0, 20) : null,
+        humanReport: item.humanReport && typeof item.humanReport === 'object' ? item.humanReport : null
     };
 }
 
@@ -605,6 +713,8 @@ async function loadSettings() {
     updateProviderStatus('groq', groqKey);
 
     $('#default-provider').value = currentSettings.defaultProvider || '';
+    $('#auto-humanize').checked = currentSettings.autoHumanize !== false;
+    $('#voice-profile').value = currentSettings.voiceProfile || '';
 
     // Load persisted models from settings cache if they exist, otherwise fetch
     ['openrouter', 'groq'].forEach(pid => {
@@ -807,6 +917,17 @@ function initSettingsEvents() {
 
     $('#prompt-modal-cancel').addEventListener('click', () => { $('#prompt-modal').style.display = 'none'; });
     $('#prompt-modal-close').addEventListener('click', () => { $('#prompt-modal').style.display = 'none'; });
+
+    $('#save-writing').addEventListener('click', async () => {
+        if (!currentSettings) return;
+        currentSettings.autoHumanize = $('#auto-humanize').checked;
+        currentSettings.voiceProfile = $('#voice-profile').value.slice(0, 8000);
+        await chrome.runtime.sendMessage({ action: 'saveSettings', settings: currentSettings });
+        const btn = $('#save-writing');
+        btn.textContent = 'Saved ✓';
+        showSidebarToast('Writing settings saved', 'success');
+        setTimeout(() => { btn.textContent = 'Save Writing'; }, 1500);
+    });
 }
 
 function updateDefaultModelDropdown() {
@@ -956,7 +1077,7 @@ async function init() {
     initSettingsEvents();
     initImport();
     await loadHistory();
-    console.log('[ReddJSON] Sidebar v2.1 ready ✓');
+    console.log('[ReddJSON] Sidebar v2.2 ready ✓');
 }
 
 if (document.readyState === 'loading') {

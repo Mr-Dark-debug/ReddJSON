@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-FF4500?style=flat-square&logo=googlechrome&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.0-FF4500?style=flat-square&logo=googlechrome&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/manifest-v3-4285F4?style=flat-square" alt="Manifest V3">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
   <img src="https://img.shields.io/badge/zero-dependencies-blueviolet?style=flat-square" alt="Zero Dependencies">
@@ -25,7 +25,7 @@
 ## ✨ Features
 
 - **One-Click Copy** — Click the `{} JSON` button on any post to copy the full, pretty-printed JSON to your clipboard
-- **Native Integration** — Button seamlessly blends into Reddit's toolbar with matching colors and styling
+- **Native Integration** — Button blends cleanly into Reddit's toolbar with matching colors and styling
 - **Infinite Scroll Support** — Automatically adds buttons to new posts as you scroll (MutationObserver)
 - **Dual Reddit Support** — Works on both `www.reddit.com` (new) and `old.reddit.com`
 - **Copy History** — Popup shows your last 50 copied posts with persistent storage
@@ -34,6 +34,16 @@
 - **Export History** — Download your entire copy history as a JSON file
 - **Error Handling** — Graceful toasts for network errors, private subs, rate limits
 - **Zero Dependencies** — No external libraries, no build step, instant load
+
+### 🤖 LinkedIn AI (v2.2 — powered by the `/li-*` skill engine)
+
+Vendored from the MIT-licensed [**linkedin-agent-skill**](https://github.com/Jakeschincariol/linkedin-agent-skill):
+
+- **21 Hook Formulas** — The `Hook Engine` template fills one of the 21 tested hook formulas (Contrarian Take, Number Reveal, Mistake Confession, …) with a real detail from the thread. Each formula ships with its "how it gets ruined" guidance, so the model avoids the classic failure modes.
+- **Auto-Humanizer** — Every generated post is cleaned before you see it: invisible watermark characters (zero-width, BOM, tag chars) are deleted, em dashes → commas, curly quotes → straight, and **113 AI-slop terms** ("delve", "leverage", "robust", "seamless", …) are rewritten to plain English. What you copy is what gets cleaned.
+- **5-Check Detection Panel** — After cleaning, the draft is scored locally by five heuristics modeled on what public AI-detectors measure: **BURSTINESS · SPECIFICITY · SLOP DENSITY · FINGERPRINT · VOICE**. Each AI post gets a score badge (`74 · PASS`) — click it for the full report: per-check bars, every slop hit, and the structural tells (rule-of-three, "It's not just X, it's Y"…) that stay flagged **for you to rewrite**.
+- **Voice Profile** — A free-text profile in Settings is appended to every prompt, so posts sound like you, not like everyone else.
+- **Nothing auto-posts** — Like the skills themselves: they write, you post. The extension hands you a copy-ready block (also why it never violates LinkedIn's automation rules).
 
 ---
 
@@ -155,20 +165,30 @@ The response is an array of two "Listing" objects:
 
 ```
 Content Script (content.js)           Background Worker (background.js)
-┌──────────────────────────┐          ┌──────────────────────────┐
-│ 1. Find <shreddit-post>  │          │                          │
-│ 2. Extract permalink     │ ──msg──► │ 3. fetch(permalink.json) │
-│ 4. Copy to clipboard     │ ◄──msg── │    Return JSON data      │
-│ 5. Show toast            │ ──msg──► │ 6. Store in history      │
-│ 7. MutationObserver      │          │                          │
-│    (infinite scroll)     │          │                          │
-└──────────────────────────┘          └──────────────────────────┘
+┌──────────────────────────┐          ┌──────────────────────────────────┐
+│ 1. Find <shreddit-post>  │          │                                  │
+│ 2. Extract permalink     │ ──msg──► │ 3. fetch(permalink.json)         │
+│ 4. Copy to clipboard     │ ◄──msg── │    Return JSON data              │
+│ 5. Show toast            │ ──msg──► │ 6. Store in history              │
+│ 7. MutationObserver      │          │                                  │
+│    (infinite scroll)     │          │ ── LinkedIn skill engine ──      │
+└──────────────────────────┘          │ 7b. buildSystemPrompt()          │
+                                      │     21 hooks + voice profile     │
+                                      │ 7c. generateAIPost()             │
+│                                      │ 7d. humanize() → detect() (v2.2)│
+│                                      │     store score + full report   │
+                                      └───────┬──────────────────────────┘
                                                 │
                                       ┌─────────▼───────────┐
                                       │ chrome.storage.local│
                                       │ (last 50 entries)   │
                                       └─────────────────────┘
 ```
+
+The humanizer (`lib/humanizer.js`) is a JS port of the MIT-licensed
+[`linkedin-agent-skill`](https://github.com/Jakeschincariol/linkedin-agent-skill)
+`/li-human` tool (`humanize.py` + `detect.py`), reading the same vendored
+`slop.json` lexicon so it stays resync-able with upstream.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full component reference and data flow.
 
@@ -211,6 +231,20 @@ Contributions are welcome! Here's how:
 2. Load unpacked in `chrome://extensions`
 3. Make changes → click the refresh button in extensions page
 4. Test on `www.reddit.com` and `old.reddit.com`
+
+---
+
+## 🙏 Credits
+
+The LinkedIn write path in v2.2 is powered by a JS port of the tooling from
+[**linkedin-agent-skill**](https://github.com/Jakeschincariol/linkedin-agent-skill)
+by **Jake Schincariol** ([opusjake.ai](https://opusjake.ai)), MIT licensed and
+vendored under [`skills/`](skills/VENDORED.md): the 21 hook formulas
+(`hooks.json`), the slop lexicon and humanizer logic (`slop.json`,
+`humanize.py`, `detect.py`), and the voice-profile questionnaire
+(`templates/voice.md`). The five-check panel and humanizer logic run locally in
+the extension; the Python reference implementations live in `skills/li-human`
+unmodified. Nothing here posts to LinkedIn for you — these tools write, you post.
 
 ---
 

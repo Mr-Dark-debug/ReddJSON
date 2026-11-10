@@ -225,6 +225,47 @@
                     </h2>
                     <div id="prompts-list" class="prompts-list"></div>
                     <button class="btn-outline" id="add-prompt">+ Add New Prompt</button>
+                    <p class="section-hint" style="margin-top:8px">
+                        <strong>Hook Engine</strong> is the /li-post-style template: it injects the 21 hook
+                        formulas (vendored from MIT-licensed linkedin-agent-skill). Edits survive — keep the
+                        <code>{{HOOK_FORMULAS}}</code> placeholder to stay wired to the library.
+                    </p>
+                </section>
+
+                <!-- ── Writing (LinkedIn skill) ── -->
+                <section class="settings-section">
+                    <h2 class="section-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                        </svg>
+                        Writing (LinkedIn skill)
+                    </h2>
+                    <div class="default-selection writing-section">
+                        <div class="input-group">
+                            <label class="toggle-row" for="auto-humanize">
+                                <input type="checkbox" id="auto-humanize">
+                                <span><strong>Auto-humanize new posts</strong></span>
+                            </label>
+                            <p class="section-hint">
+                                Strips the AI fingerprint (invisible characters, em dashes, curly quotes,
+                                AI-slop vocabulary) from every generated post, then scores what's left with the
+                                five-check panel (BURSTINESS / SPECIFICITY / SLOP DENSITY / FINGERPRINT / VOICE).
+                                Structural tells stay flagged for you to rewrite.
+                            </p>
+                        </div>
+                        <div class="input-group">
+                            <label>Voice profile — appended to every prompt</label>
+                            <textarea id="voice-profile" class="textarea-input" rows="8"
+                                placeholder="Who I am: —&#10;What I do in one sentence: —&#10;Who I write for: —&#10;Words I actually use: —&#10;Words I would never use: —&#10;Pasted posts that sound like me: —"></textarea>
+                            <p class="section-hint">
+                                Answer in plain text. 3 of your own best posts pasted here works better than
+                                style adjectives. Real numbers only: drafts never invent one.
+                            </p>
+                        </div>
+                        <button class="btn-primary" id="save-writing">Save Writing</button>
+                    </div>
                 </section>
 
             </div>

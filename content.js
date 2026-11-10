@@ -1,5 +1,5 @@
 /**
- * ReddJSON Content Script v2.1
+ * ReddJSON Content Script v2.2
  * ═══════════════════════════════════════════════════════════════════
  * Injects "JSON" + "Post" buttons into Reddit action bars.
  *
@@ -11,7 +11,7 @@
  * v2.1: JSON filter menu (post-only vs full), keyboard shortcut
  * message handling, processedPostIds cap.
  *
- * @version 2.1.0
+ * @version 2.2.0
  */
 
 // ============================================================================
@@ -1050,12 +1050,12 @@ setInterval(onUrlChange, 350);
 // ============================================================================
 
 function init() {
-  console.log('[ReddJSON] Content v2.1 initializing…');
+  console.log('[ReddJSON] Content v2.2 initializing…');
   injectStyles();
   processAllPosts();
   startObserver();
   schedulePostProcessing([100, 500, 1200, 2500]);
-  console.log('[ReddJSON] Content v2.1 ready ✓');
+  console.log('[ReddJSON] Content v2.2 ready ✓');
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

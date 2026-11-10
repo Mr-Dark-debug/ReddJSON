@@ -1,6 +1,6 @@
 # ReddJSON Architecture
 
-> Version 1.0.0 · Manifest V3 · Chrome Extension
+> Version 2.2.0 · Manifest V3 · Chrome Extension
 
 ---
 
@@ -103,6 +103,41 @@ popup.js: init()
         └─ [Search]     → Client-side filter on title/subreddit/postId
 ```
 
+### 3. AI Post Generation — the LinkedIn skill engine (v2.2)
+
+The LinkedIn write path is powered by a JS port of the MIT-licensed
+[`linkedin-agent-skill`](https://github.com/Jakeschincariol/linkedin-agent-skill)
+(vendored verbatim under `skills/`, see `skills/VENDORED.md`):
+
+```
+"Post" button / Ctrl+Shift+L
+        │
+        ▼
+background.js
+  ├─ buildSystemPrompt()           hook-engine template ({{HOOK_FORMULAS}}
+  │                                → 21 hook formulas from skills/li-post/hooks.json)
+  │                                + voice profile appended (settings.voiceProfile)
+  ├─ generateAIPost()              provider chat completion (OpenRouter / Groq)
+  │        ▼
+  ├─ humanizeDraft()               lib/humanizer.js (port of /li-human):
+  │    ├─ humanize()               1. INVISIBLE    zero-width / format chars
+  │    │                           2. TYPOGRAPHIC  em dash → comma, curly → straight
+  │    │                           3. LEXICAL      113-term slop lexicon → plain words
+  │    ├─ scanStructures()         11 structural tells → FLAGGED, never rewritten
+  │    └─ detect()                 5-check panel: BURSTINESS / SPECIFICITY /
+  │                                SLOP DENSITY / FINGERPRINT / VOICE
+  │                                overall = 0.6·mean + 0.4·min
+  │                                PASS ≥ 70 ∧ min ≥ 55 · REVIEW ≥ 50 · else FLAGGED
+  ├─ addAIPost()                   stores cleaned text + {humanScore, verdict, humanReport}
+  ▼
+sidebar.js renderAIPosts()
+  └─ score badge (click → full report: check bars, slop hits, tells)
+```
+
+The humanizer runs automatically when `settings.autoHumanize` is on (default).
+Nothing is ever auto-posted to LinkedIn — the extension hands you a copy-ready
+block, you post it, which is also what keeps it inside LinkedIn's ToS.
+
 ---
 
 ## Component Reference
@@ -161,13 +196,21 @@ popup.js: init()
 ```
 ReddJSON/
 ├── manifest.json           # Extension manifest (Manifest V3)
-├── background.js           # Service worker – fetch + storage
+├── background.js           # Service worker – fetch + storage + skill engine
 ├── content.js              # Content script – injection + observer
 ├── content.css             # Content script styles (injected into Reddit)
-├── popup.html              # Popup HTML structure
-├── popup.js                # Popup logic & event handling
-├── popup.css               # Popup styles (premium design)
-├── reddjosn.svg            # Source SVG icon (Reddit Snoo + JSON)
+├── sidebar.html            # Side panel structure (v2.x replaced the popup)
+├── sidebar.js              # Side panel logic (history, AI posts, settings)
+├── sidebar.css             # Side panel styles (+ human-score report)
+├── lib/
+│   └── humanizer.js        # JS port of /li-human (humanize + detect) — v2.2
+├── skills/                 # Vendored linkedin-agent-skill files (see VENDORED.md)
+│   ├── li-human/{slop.json, humanize.py, detect.py, SKILL.md}
+│   ├── li-post/{hooks.json, SKILL.md}
+│   └── … 11 skill folders in total (MIT, © Jake Schincariol)
+├── templates/
+│   └── voice.md            # Voice-profile questionnaire (skill template)
+├── reddjosn.svg
 ├── icons/
 │   ├── icon-16.png         # 16×16 toolbar icon
 │   ├── icon-48.png         # 48×48 management icon
@@ -175,10 +218,11 @@ ReddJSON/
 │   ├── reddjosn.svg        # SVG copy in icons folder
 │   ├── icon-generator.html # Browser-based PNG generator
 │   └── generate-icons.js   # Node.js icon generator script
+├── tests/
+│   ├── test-reddjson.js    # Logic tests (URL parsing, injection, sanitizing)
+│   └── test-humanizer.js   # Humanizer port tests (11 checks vs upstream)
 ├── docs/
 │   └── ARCHitecture.md     # Legacy architecture doc
-├── TEST/
-│   └── test-plan.md        # Manual test checklist
 ├── README.md               # Full documentation
 └── ARCHITECTURE.md         # This file
 ```
