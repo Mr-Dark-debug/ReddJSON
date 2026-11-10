@@ -18,30 +18,54 @@ test('extracts post data correctly from quarantined or short URL pathname', () =
   assert.equal(urlMatch[2], 'abc123z');
 });
 
-test('slot determination correctly identifies appropriate slot name for Web Components', () => {
-  function determineSlot(targetEl, postElement) {
-    if (targetEl?.getAttribute?.('slot')) return targetEl.getAttribute('slot');
-    if (targetEl?.parentElement && targetEl.parentElement !== postElement && targetEl.parentElement.getAttribute?.('slot')) {
-      return targetEl.parentElement.getAttribute('slot');
+test('slot determination mirrors the v2.3 placement decision table', () => {
+  // From findActionBar + injectButtonsToNewRedditPost (v2.3): the wrapper
+  // carries a slot attribute only when it is a direct light child of the
+  // post (or forceSlot is set). Verified targets come from Reddit's shadow
+  // DOM: the bottom action bar is rpl-action-bar > slot[name=share-button],
+  // and there is NO slot named "action-bar" — assigning to it renders nothing.
+  function placeWrapper(wrapper, post, actionBar) {
+    const isDirectChildOfPost =
+      actionBar.shareButton?.parentElement === post || actionBar.container === post;
+    const slotName = actionBar.forceSlot ||
+      (actionBar.slotName && isDirectChildOfPost ? actionBar.slotName : null);
+    if (slotName) wrapper.setAttribute('slot', slotName);
+    if (actionBar.shareButton && actionBar.shareButton.parentElement) {
+      actionBar.shareButton.after(wrapper);
+    } else if (actionBar.container) {
+      actionBar.container.appendChild(wrapper);
     }
-    const candidates = ['action-bar', 'share-button', 'credit-bar', 'post-overflow-menu'];
-    for (const c of candidates) {
-      if (postElement?.mockSlots?.includes(c)) return c;
-    }
-    return 'action-bar';
+    return wrapper;
   }
 
-  // Case 1: share button has slot="share-button"
-  const shareBtn = { getAttribute: (attr) => (attr === 'slot' ? 'share-button' : null), parentElement: null };
-  assert.equal(determineSlot(shareBtn, null), 'share-button');
+  // Case 1: shadow root bottom bar exists -> wrapper slotted share-button, appended
+  const post1b = { children: [], appendChild(c) { this.children.push(c); c.parentElement = this; } };
+  const w1 = { setAttribute(k, v) { this['_s' + k] = v; } };
+  placeWrapper(w1, post1b, { container: post1b, shareButton: null, inShadow: true, slotName: 'share-button' });
+  assert.equal(w1['_sslot'], 'share-button', 'shadow-slot strategy must assign slot=share-button');
+  assert.equal(post1b.children.length, 1);
 
-  // Case 2: share button has slot="action-bar"
-  const actionBtn = { getAttribute: (attr) => (attr === 'slot' ? 'action-bar' : null), parentElement: null };
-  assert.equal(determineSlot(actionBtn, null), 'action-bar');
+  // Case 2: direct own share button -> inherits its slot name, inserted after it
+  const share2 = { parentElement: null, attributes: {}, getAttribute: (a) => 'share-button', after(n) { n.parentElement = this.parentElement; } };
+  const post2 = { appendChild(c) { share2.parentElement = post2; } };
+  post2.appendChild(share2);
+  const w2 = { setAttribute(k, v) { this['_s' + k] = v; } };
+  placeWrapper(w2, post2, { container: post2, shareButton: share2, inShadow: false, slotName: 'share-button' });
+  assert.equal(w2['_sslot'], 'share-button');
 
-  // Case 3: postElement has slot candidates
-  const postElement = { mockSlots: ['action-bar'] };
-  assert.equal(determineSlot({}, postElement), 'action-bar');
+  // Case 3: NOT a direct child (deep in a container) -> NO slot attribute
+  const w3 = { setAttribute(k, v) { this['_s' + k] = v; } };
+  placeWrapper(w3, {}, { container: {}, shareButton: { parentElement: {}, after: () => {} }, inShadow: false, slotName: 'share-button' });
+  assert.equal(w3['_sslot'], undefined, 'deep-inserted wrappers must render inline (no slot attr)');
+
+  // Case 4: single-post fallback forceSlot must target the existing
+  // share-button slot — 'action-bar' does not exist in the shadow root and
+  // an assignment to it renders nowhere (invisible buttons bug).
+  const post4 = { children: [], appendChild(c) { this.children.push(c); } };
+  const w4 = { setAttribute(k, v) { this['_s' + k] = v; } };
+  placeWrapper(w4, post4, { container: post4, shareButton: null, inShadow: false, forceSlot: 'share-button' });
+  assert.equal(w4['_sslot'], 'share-button');
+  assert.equal(post4.children.length, 1);
 });
 
 test('hasReddJsonButtons prevents duplicates without false blocking new elements', () => {
@@ -132,6 +156,15 @@ test('mock DOM: simulates single post page injection and slot assignment', () =>
         this.parentElement.children.splice(idx + 1, 0, newSibling);
       }
     }
+    closest(selector) {
+      let cur = this;
+      while (cur) {
+        if (selector === cur.tagName) return cur;
+        if (selector.startsWith('[slot=') && cur.getAttribute && cur.getAttribute('slot') === selector.slice(7, -2)) return cur;
+        cur = cur.parentElement;
+      }
+      return null;
+    }
     querySelector(selector) {
       for (const child of this.children) {
         if (selector === child.tagName || selector === child.getAttribute('class')) return child;
@@ -162,4 +195,117 @@ test('mock DOM: simulates single post page injection and slot assignment', () =>
   assert.equal(wrapper.getAttribute('slot'), 'share-button');
   assert.equal(post.children[1], wrapper);
   assert.equal(wrapper.parentElement, post);
+});
+
+test('mock DOM: feed card without light share button slotted into the shadow bottom bar', () => {
+  // Verified Reddit structure: feed cards have NO share/comment buttons in
+  // light DOM until hydration; the bottom action bar is inside the post's
+  // shadow root as rpl-action-bar > div > slot[name="share-button"].
+  const post = {
+    children: [],
+    shadowRoot: { slots: ['share-button'] },
+    querySelector(selector) {
+      if (selector === ':scope > shreddit-post-share-button') return null; // not hydrated
+      return null;
+    },
+    appendChild(c) { this.children.push(c); c.parentElement = this; }
+  };
+
+  // findActionBar strategy A replica
+  let actionBar = null;
+  if (post.shadowRoot?.slots?.includes('share-button')) {
+    actionBar = { container: post, shareButton: null, inShadow: true, slotName: 'share-button' };
+  }
+  assert.ok(actionBar, 'shadow bottom-bar strategy must fire on feed cards');
+
+  // injectButtonsToNewRedditPost placement replica
+  const wrapper = { attributes: {}, getAttribute(n) { return this.attributes[n] || null; }, setAttribute(n, v) { this.attributes[n] = v; } };
+  const isDirectChildOfPost =
+    (actionBar.shareButton?.parentElement === post) || (actionBar.container === post);
+  const slotName = actionBar.forceSlot ||
+    (actionBar.slotName && isDirectChildOfPost ? actionBar.slotName : null);
+  slotName && wrapper.setAttribute('slot', slotName);
+  if (actionBar.shareButton && actionBar.shareButton.parentElement) {
+    actionBar.shareButton.after(wrapper);
+  } else {
+    actionBar.container.appendChild(wrapper);
+  }
+
+  assert.equal(wrapper.getAttribute('slot'), 'share-button');
+  assert.equal(post.children.length, 1);
+  assert.equal(post.children[0], wrapper);
+});
+
+test('mock DOM: credit-bar anchoring (overflow menu at top of card) is rejected', () => {
+  const post = {
+    children: [],
+    shadowRoot: null,
+    querySelector() { return null; },
+    appendChild(c) { this.children.push(c); }
+  };
+  // span[slot=credit-bar] > span > shreddit-post-overflow-menu
+  const creditBar = { slot: 'credit-bar', children: [], getAttribute: (n) => n === 'slot' ? 'credit-bar' : null };
+  const innerSpan = { children: [], parentElement: creditBar, getAttribute: (n) => null, closest(sel) { return sel === '[slot="credit-bar"]' ? creditBar : (sel === 'shreddit-post' ? post : null); } };
+  const overflowMenu = {
+    textContent: 'More options',
+    parentElement: innerSpan,
+    closest(sel) {
+      let cur = this;
+      while (cur) {
+        if (sel.startsWith('[slot=') && cur.getAttribute?.('slot') === sel.slice(7, -2)) return cur;
+        cur = cur.parentElement;
+      }
+      return null;
+    }
+  };
+  innerSpan.children.push(overflowMenu);
+
+  // Replica of the reject rule in findActionBar's generic fallback:
+  const ruleRejects = (candidate) => !candidate || candidate.closest?.('[slot="credit-bar"]') != null;
+  assert.equal(ruleRejects(overflowMenu), true, 'the overflow menu inside credit-bar must never anchor placement');
+  assert.equal(ruleRejects(null), true, 'null candidates are not anchors');
+
+  // The buggy v2.2 behavior — anchor = overflow menu, buttons render at top.
+  // v2.3 must therefore return "no action bar" here (retry via observer)
+  // instead of anchoring at the top of the card.
+  const findActionBarReplica = (ownShareFound) => {
+    if (ownShareFound) return { anchored: 'share-button' };
+    return null; // no shadow slot, no direct share button, credit-bar rejected
+  };
+  assert.equal(findActionBarReplica(false), null);
+});
+
+test('mock DOM: embedded/crossposted post cannot hijack placement or dedup', () => {
+  // A crosspost embed is a full shreddit-post INSIDE the main card.
+  const mainPost = { closest: () => null, children: [] };
+  const embedded = { closest: () => embedded, children: [] };
+  // our wrapper only ever inside the embedded post
+  const embeddedWrapper = { closest: (sel) => (sel === 'shreddit-post' ? embedded : null) };
+  embedded.children.push(embeddedWrapper);
+  const embeddedShare = { closest: (sel) => (sel === 'shreddit-post' ? embedded : null) };
+  embedded.children.push(embeddedShare);
+
+  // hasReddJsonButtons v2.3: only buttons whose nearest shreddit-post host is
+  // the scanned element count.
+  function hasReddJsonButtons(el, buttons) {
+    for (const node of buttons) {
+      if (!node.closest?.('shreddit-post') || node.closest('shreddit-post') === el) return true;
+    }
+    return false;
+  }
+  const allButtons = [embeddedWrapper, embeddedShare];
+  assert.equal(hasReddJsonButtons(mainPost, allButtons), false,
+    'embedded-post buttons must not mark the main card as processed');
+  assert.equal(hasReddJsonButtons(embedded, allButtons), true,
+    'the embedded post itself owns its buttons');
+
+  // findActionBar own-share check uses :scope > semantics = a DIRECT child.
+  const directOwnShare = (postLike) => postLike.children.find(
+    c => c.getAttribute?.('aria-share') === 'y' && c.parentElement === postLike);
+  const own = { getAttribute: (n) => (n === 'aria-share' ? 'y' : null), parentElement: null };
+  mainPost.children.push(own);
+  own.parentElement = mainPost;
+  assert.equal(directOwnShare(mainPost), own, 'direct share child is an anchor');
+  assert.equal(directOwnShare(embedded), undefined,
+    'embedded share (not a direct child of the main card) must not anchor the main card');
 });

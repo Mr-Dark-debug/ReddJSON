@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ReddJSON — Reddit to LinkedIn AI",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Copy Reddit post JSON, generate LinkedIn posts with AI — 21 hook formulas, auto-humanizer with a 5-check AI-fingerprint panel. Sidebar with history, AI posts, and provider settings.",
   "author": "ReddJSON Team",
   "icons": {
