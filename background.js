@@ -1,5 +1,5 @@
 /**
- * ReddJSON Background Service Worker v2.2
+ * ReddJSON Background Service Worker v2.3
  * ═══════════════════════════════════════════════════════════════════
  * Handles:
  *   1. Reddit .json API fetching
@@ -12,7 +12,7 @@
  *   8. LinkedIn skill engine: 21 hook formulas + humanizer + 5-check panel
  *      (ported from MIT-licensed linkedin-agent-skill, see skills/VENDORED.md)
  *
- * @version 2.2.0
+ * @version 2.3.0
  */
 
 importScripts('lib/humanizer.js');
@@ -24,7 +24,7 @@ importScripts('lib/humanizer.js');
 const MAX_HISTORY_ENTRIES = 50;
 const MAX_AI_POSTS = 50;
 const MAX_JSON_STORAGE_BYTES = 500_000;
-const USER_AGENT = 'ReddJSON/2.2.0 (Chrome Extension)';
+const USER_AGENT = 'ReddJSON/2.3.0 (Chrome Extension)';
 
 /** Default system prompt templates for LinkedIn post generation */
 const PROMPT_TEMPLATES = [
@@ -925,4 +925,4 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-console.log('[ReddJSON] Background service worker v2.2 loaded');
+console.log('[ReddJSON] Background service worker v2.3 loaded');

@@ -1,6 +1,6 @@
 # ReddJSON Architecture
 
-> Version 2.2.0 · Manifest V3 · Chrome Extension
+> Version 2.3.0 · Manifest V3 · Chrome Extension
 
 ---
 

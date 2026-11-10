@@ -1,5 +1,5 @@
 /**
- * ReddJSON Content Script v2.2
+ * ReddJSON Content Script v2.3
  * ═══════════════════════════════════════════════════════════════════
  * Injects "JSON" + "Post" buttons into Reddit action bars.
  *
@@ -10,8 +10,13 @@
  *
  * v2.1: JSON filter menu (post-only vs full), keyboard shortcut
  * message handling, processedPostIds cap.
+ * v2.3: button placement fix — the wrapper is a slot="share-button" direct
+ * light child of shreddit-post, landing in the bottom action bar next to
+ * vote / comment / share (verified against the live shadow DOM; the old
+ * fallback anchored inside the credit-bar, which rendered at the top of
+ * the card).
  *
- * @version 2.2.0
+ * @version 2.3.0
  */
 
 // ============================================================================
@@ -52,6 +57,16 @@ const SELECTORS = {
   shredditPost: 'shreddit-post',
   postContainer: '[data-testid="post-container"]',
   oldRedditThing: '.thing.link',
+  // Verified against Reddit's shadow DOM (Nov 2026): the bottom action bar of a
+  // shreddit-post card (feed + comment pages) is `rpl-action-bar > div >
+  // slot[name="share-button"]` inside the post's shadow root, and the hydration
+  // step may later add the share button as a direct light child. Light children
+  // slotted as slot="share-button" render in that same row.
+  ownShareButton: ':scope > shreddit-post-share-button',
+  postShareShadowSlot: 'slot[name="share-button"]',
+  // Everything inside the credit-bar (author line, incl. shreddit-post-overflow-menu)
+  // renders at the TOP of the card — never a placement anchor.
+  creditBarSlot: '[slot="credit-bar"]',
   shareButtonSelectors: [
     'shreddit-post-share-button',
     'button[aria-label="Share"]',
@@ -134,9 +149,20 @@ function getPostUniqueKey(postElement) {
 
 function hasReddJsonButtons(el, actionBar = null) {
   if (!el) return false;
-  if (el.querySelector?.('.reddjson-buttons-wrapper, .reddjson-action-btn')) return true;
-  if (el.shadowRoot?.querySelector?.('.reddjson-buttons-wrapper, .reddjson-action-btn')) return true;
-  if (actionBar?.container?.querySelector?.('.reddjson-buttons-wrapper, .reddjson-action-btn')) return true;
+  // Embedded/crossposted shreddit-posts inside this card can carry our buttons
+  // without this post having been processed — only count buttons that really
+  // belong to `el` (their nearest shreddit-post host must be `el` itself).
+  const belongsToHost = (node) => !node.closest?.('shreddit-post') || node.closest('shreddit-post') === el;
+  for (const node of el.querySelectorAll?.('.reddjson-buttons-wrapper, .reddjson-action-btn') || []) {
+    if (belongsToHost(node)) return true;
+  }
+  const shadowRoot = el.shadowRoot;
+  for (const node of shadowRoot?.querySelectorAll?.('.reddjson-buttons-wrapper, .reddjson-action-btn') || []) {
+    if (belongsToHost(node)) return true;
+  }
+  for (const node of actionBar?.container?.querySelectorAll?.('.reddjson-buttons-wrapper, .reddjson-action-btn') || []) {
+    if (belongsToHost(node)) return true;
+  }
   return false;
 }
 
@@ -452,61 +478,77 @@ async function handleGenerateLI(e, btn, postData, promptId = null) {
 function findActionBar(postElement) {
   if (!postElement) return null;
 
-  // Strategy 1: find a Share or action button in light DOM of post
-  for (const sel of SELECTORS.shareButtonSelectors) {
-    const shareBtn = postElement.querySelector(sel);
-    if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn, inShadow: false };
+  // ── PREFERRED: Reddit's own bottom action bar ──
+  // On feed and comment pages the vote/comment/share row renders inside the
+  // post's shadow root (rpl-action-bar). Light children slotted as
+  // slot="share-button" are assigned into that row, so that is where our
+  // wrapper belongs — never in the credit-bar at the top of the card.
+  if (postElement.shadowRoot?.querySelector?.(SELECTORS.postShareShadowSlot)) {
+    return { container: postElement, shareButton: null, inShadow: true, slotName: 'share-button' };
   }
 
-  // Strategy 2: check shadowRoot
-  if (postElement.shadowRoot) {
-    for (const sel of SELECTORS.shareButtonSelectors) {
-      const shareBtn = postElement.shadowRoot.querySelector(sel);
-      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn, inShadow: true };
-    }
-    // Check slots or toolbars inside shadowRoot
-    const shadowToolbar = postElement.shadowRoot.querySelector(
-      'slot[name="action-bar"], slot[name="share-button"], slot[name="credit-bar"], [role="toolbar"], .action-row'
-    );
-    if (shadowToolbar) {
-      return { container: shadowToolbar.parentElement || postElement.shadowRoot, shareButton: shadowToolbar, inShadow: true };
-    }
+  // The share button as a DIRECT light child of this post (post-hydration) —
+  // an explicit sibling anchor. `:scope >` guarantees an embedded or crossposted
+  // shreddit-post deeper in the tree can never hijack placement.
+  const ownShare = postElement.querySelector(SELECTORS.ownShareButton);
+  if (ownShare) {
+    return {
+      container: postElement,
+      shareButton: ownShare,
+      inShadow: false,
+      slotName: ownShare.getAttribute('slot') || 'share-button'
+    };
   }
 
-  // Strategy 3: generic button text match in post
-  const allBtns = postElement.querySelectorAll('button');
-  for (const b of allBtns) {
-    const text = b.textContent?.trim() || '';
-    const label = b.getAttribute('aria-label') || '';
-    if (text === 'Share' || label.toLowerCase().includes('share')) {
-      return { container: b.parentElement, shareButton: b, inShadow: false };
-    }
-  }
-
-  // Strategy 4: find action row or toolbar
-  const actionRow = postElement.querySelector('[data-testid="action-row"], [slot="action-bar"], [slot="credit-bar"], rpl-action-bar');
+  // Generic fallback: explicit action-row containers, but only when they are
+  // not the credit-bar (top of card) and not the owner of another post's row.
+  const actionRow = [...(postElement.querySelectorAll?.('[data-testid="action-row"], rpl-action-bar, shreddit-post-action-bar') || [])]
+    .find(row => row.closest?.('shreddit-post') === postElement && !row.closest?.(SELECTORS.creditBarSlot));
   if (actionRow) {
     for (const sel of SELECTORS.shareButtonSelectors) {
       const shareBtn = actionRow.querySelector(sel);
-      if (shareBtn) return { container: shareBtn.parentElement, shareButton: shareBtn, inShadow: false };
+      if (shareBtn
+          && !shareBtn.closest?.(SELECTORS.creditBarSlot)
+          && shareBtn.closest?.('shreddit-post') === postElement) {
+        return {
+          container: shareBtn.parentElement,
+          shareButton: shareBtn,
+          inShadow: false,
+          slotName: shareBtn.getAttribute('slot') || null
+        };
+      }
     }
     const lastChild = actionRow.lastElementChild;
-    return { container: actionRow, shareButton: lastChild, inShadow: false };
+    return { container: actionRow, shareButton: lastChild, inShadow: false, slotName: null };
   }
 
-  // Strategy 5: on single post page, search document for post's action bar
+  // Strategy: on single post pages, search the document for THIS post's action
+  // bar (the matched element must belong to postElement).
   if (/\/comments\//.test(window.location.pathname)) {
-    const pageShareBtn = document.querySelector('shreddit-post-share-button, shreddit-post-overflow-menu');
-    if (pageShareBtn && !pageShareBtn.closest('shreddit-comment')) {
-      return { container: pageShareBtn.parentElement, shareButton: pageShareBtn, inShadow: false };
+    const pageShareBtn = document.querySelector('shreddit-post-share-button');
+    if (pageShareBtn
+        && pageShareBtn.closest?.('shreddit-post') === postElement
+        && !pageShareBtn.closest?.(SELECTORS.creditBarSlot)) {
+      return {
+        container: pageShareBtn.parentElement,
+        shareButton: pageShareBtn,
+        inShadow: false,
+        slotName: pageShareBtn.getAttribute('slot') || 'share-button'
+      };
     }
     const pageActionRow = document.querySelector('[data-testid="action-row"]');
-    if (pageActionRow && !pageActionRow.querySelector('.reddjson-action-btn')) {
+    if (pageActionRow
+        && pageActionRow.closest?.('shreddit-post') === postElement
+        && !pageActionRow.closest?.(SELECTORS.creditBarSlot)
+        && !pageActionRow.querySelector('.reddjson-action-btn')) {
       const lastChild = pageActionRow.lastElementChild;
-      return { container: pageActionRow, shareButton: lastChild, inShadow: false };
+      return { container: pageActionRow, shareButton: lastChild, inShadow: false, slotName: null };
     }
     if (postElement.tagName?.toLowerCase() === 'shreddit-post') {
-      return { container: postElement, shareButton: null, forceSlot: 'action-bar', inShadow: false };
+      // Last resort: still slot into the bottom action bar. NOTE: there is no
+      // `action-bar` slot in shreddit-post's shadow root from the shadow-root
+      // slot list — an element assigned to a nonexistent slot renders nowhere.
+      return { container: postElement, shareButton: null, inShadow: false, forceSlot: 'share-button' };
     }
   }
 
@@ -536,8 +578,8 @@ function injectButtonsToNewRedditPost(postElement) {
   }
 
   // Double-check: if buttons already exist in this action bar container, skip
-  if (actionBar.container.querySelector?.('.reddjson-action-btn') ||
-      actionBar.container.querySelector?.('.reddjson-buttons-wrapper')) {
+  // (hasReddJsonButtons ignores buttons that belong to embedded/crossposted posts)
+  if (hasReddJsonButtons(actionBar.container, actionBar)) {
     postElement.setAttribute(CONFIG.markerAttr, 'true');
     return;
   }
@@ -577,28 +619,19 @@ function injectButtonsToNewRedditPost(postElement) {
   wrapper.appendChild(jsonBtn);
   wrapper.appendChild(liBtn);
 
-  // Web Component Slot Assignment:
-  // If wrapper is placed inside a custom element with Shadow DOM (like shreddit-post),
-  // it must have the appropriate slot attribute to be rendered.
-  let slotName = actionBar.forceSlot || null;
-  if (!slotName && actionBar.shareButton?.getAttribute) {
-    slotName = actionBar.shareButton.getAttribute('slot');
-  }
-  if (!slotName && actionBar.container?.getAttribute) {
-    slotName = actionBar.container.getAttribute('slot');
-  }
+  // Web Component slot placement (verified against Reddit's shadow DOM):
+  // The wrapper renders in the bottom action row only when it is a DIRECT light
+  // child of shreddit-post assigned to slot="share-button" — the row is
+  // rpl-action-bar > div > slot[name="share-button"] in the post's shadow root.
+  // 1. forceSlot (single-post fallback) → always applied.
+  // 2. A slotName from the action bar + the wrapper landing as a direct light
+  //    child of the post → applied. Reddit then assigns it into the same row.
+  // 3. Otherwise NO slot attribute: the wrapper was inserted next to an
+  //    element deep in a container and must render inline, where it was placed.
   const isDirectChildOfPost = (actionBar.shareButton?.parentElement === postElement) ||
                               (actionBar.container === postElement);
-  if (!slotName && isDirectChildOfPost) {
-    const candidates = ['action-bar', 'share-button', 'credit-bar', 'post-overflow-menu'];
-    for (const c of candidates) {
-      if (postElement.querySelector(`[slot="${c}"]`)) { slotName = c; break; }
-      if (postElement.shadowRoot?.querySelector(`slot[name="${c}"]`)) { slotName = c; break; }
-    }
-    if (!slotName) slotName = 'action-bar';
-  }
-
-  if (slotName && (isDirectChildOfPost || !actionBar.inShadow)) {
+  const slotName = actionBar.forceSlot || (actionBar.slotName && isDirectChildOfPost ? actionBar.slotName : null);
+  if (slotName) {
     wrapper.setAttribute('slot', slotName);
   }
 
@@ -1050,12 +1083,12 @@ setInterval(onUrlChange, 350);
 // ============================================================================
 
 function init() {
-  console.log('[ReddJSON] Content v2.2 initializing…');
+  console.log('[ReddJSON] Content v2.3 initializing…');
   injectStyles();
   processAllPosts();
   startObserver();
   schedulePostProcessing([100, 500, 1200, 2500]);
-  console.log('[ReddJSON] Content v2.2 ready ✓');
+  console.log('[ReddJSON] Content v2.3 ready ✓');
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

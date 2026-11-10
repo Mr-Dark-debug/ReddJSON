@@ -1,5 +1,5 @@
 /**
- * ReddJSON Sidebar v2.2
+ * ReddJSON Sidebar v2.3
  * ═══════════════════════════════════════════════════════════════════
  * 3-tab UI: History | AI Posts | Settings
  *
@@ -1077,7 +1077,7 @@ async function init() {
     initSettingsEvents();
     initImport();
     await loadHistory();
-    console.log('[ReddJSON] Sidebar v2.2 ready ✓');
+    console.log('[ReddJSON] Sidebar v2.3 ready ✓');
 }
 
 if (document.readyState === 'loading') {
