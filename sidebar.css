@@ -999,3 +999,242 @@ body {
     color: var(--text-muted);
     margin-top: 1px;
 }
+
+/* ═══════════════ LinkedIn skill engine — human score badge ═══════════════ */
+
+.score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    border: 1px solid transparent;
+    font-family: var(--font);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+.score-badge:hover { transform: translateY(-1px); }
+.score-badge svg { flex: none; }
+
+.score-badge.verdict-pass {
+    color: #157A3A;
+    background: rgba(70, 209, 96, .14);
+    border-color: rgba(70, 209, 96, .45);
+}
+
+.score-badge.verdict-review {
+    color: #B45309;
+    background: rgba(245, 166, 35, .16);
+    border-color: rgba(245, 166, 35, .5);
+}
+
+.score-badge.verdict-flagged {
+    color: #C81E1E;
+    background: var(--danger-light);
+    border-color: rgba(255, 88, 91, .5);
+}
+
+[data-theme="dark"] .score-badge.verdict-pass { color: #6FE08D; }
+[data-theme="dark"] .score-badge.verdict-review { color: #F6BF6B; }
+[data-theme="dark"] .score-badge.verdict-flagged { color: #FF8A8D; }
+
+/* ═══════════════ Human-report panel (5-check AI-fingerprint panel) ═════════ */
+
+.human-report {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    animation: hr-in .18s ease;
+}
+
+@keyframes hr-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: none; }
+}
+
+.hr-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.hr-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    color: var(--text-muted);
+}
+
+.hr-overall {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.hr-verdict {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+}
+
+.hr-verdict.verdict-pass     { color: #157A3A; background: rgba(70, 209, 96, .15); }
+.hr-verdict.verdict-review   { color: #B45309; background: rgba(245, 166, 35, .16); }
+.hr-verdict.verdict-flagged  { color: #C81E1E; background: var(--danger-light); }
+
+[data-theme="dark"] .hr-verdict.verdict-pass   { color: #6FE08D; }
+[data-theme="dark"] .hr-verdict.verdict-review { color: #F6BF6B; }
+[data-theme="dark"] .hr-verdict.verdict-flagged { color: #FF8A8D; }
+
+.hr-note {
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.hr-weakest {
+    margin-top: 3px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.hr-weakest strong { color: var(--accent); }
+
+.check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 9px;
+}
+
+.check-name {
+    width: 92px;
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: .04em;
+    color: var(--text-muted);
+}
+
+.check-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-primary);
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+}
+
+.check-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--linkedin), var(--success));
+    transition: width .35s ease;
+}
+
+.check-score {
+    width: 36px;
+    flex: none;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-secondary);
+}
+
+.check-detail {
+    margin: 2px 0 0 100px;
+    font-size: 9px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.hr-summary {
+    margin-top: 9px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.hr-section-title {
+    margin: 12px 0 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.hr-hit {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 10px;
+}
+
+.hr-hit:last-child { border-bottom: none; }
+
+.hr-from { color: var(--danger); font-weight: 600; word-break: break-word; }
+.hr-arrow { color: var(--text-muted); flex: none; }
+.hr-to { color: #157A3A; font-weight: 600; word-break: break-word; }
+[data-theme="dark"] .hr-to { color: #6FE08D; }
+
+.hr-family {
+    margin-left: auto;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+    flex: none;
+}
+
+.hr-tell { padding: 4px 0; }
+
+.hr-tell-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.hr-fix {
+    font-size: 9px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.hr-foot {
+    margin-top: 10px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-light);
+    font-size: 8.5px;
+    color: var(--text-muted);
+}
+
+/* ═══════════════ Writing settings section ═══════════════ */
+
+.writing-section { display: block; }
+
+.writing-section .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.writing-section .toggle-row input[type="checkbox"] {
+    accent-color: var(--linkedin);
+    width: 14px;
+    height: 14px;
+}
+
+.label-hint { color: var(--text-muted); font-weight: 400; }

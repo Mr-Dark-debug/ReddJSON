@@ -1,5 +1,5 @@
 /**
- * ReddJSON Background Service Worker v2.1
+ * ReddJSON Background Service Worker v2.2
  * ═══════════════════════════════════════════════════════════════════
  * Handles:
  *   1. Reddit .json API fetching
@@ -9,9 +9,13 @@
  *   5. Keyboard shortcut commands
  *   6. JSON filtering (post-only vs full thread)
  *   7. Storage size optimization
+ *   8. LinkedIn skill engine: 21 hook formulas + humanizer + 5-check panel
+ *      (ported from MIT-licensed linkedin-agent-skill, see skills/VENDORED.md)
  *
- * @version 2.1.0
+ * @version 2.2.0
  */
+
+importScripts('lib/humanizer.js');
 
 // ============================================================================
 // CONSTANTS
@@ -20,10 +24,35 @@
 const MAX_HISTORY_ENTRIES = 50;
 const MAX_AI_POSTS = 50;
 const MAX_JSON_STORAGE_BYTES = 500_000;
-const USER_AGENT = 'ReddJSON/2.1.0 (Chrome Extension)';
+const USER_AGENT = 'ReddJSON/2.2.0 (Chrome Extension)';
 
 /** Default system prompt templates for LinkedIn post generation */
 const PROMPT_TEMPLATES = [
+  {
+    id: 'hook-engine',
+    name: 'Hook Engine · /li-post (21 hook formulas)',
+    isDefault: true,
+    prompt: `You are a world-class LinkedIn post writer. Transform the entire Reddit thread (full JSON data) into ONE post, engineered around the FIRST LINE.
+
+{{HOOK_FORMULAS}}
+
+Write like a human, not like a model:
+- Plain text only. No Markdown, no headers, no emojis except at most one.
+- NEVER use em dashes, en dashes, curly quotes or ellipsis characters. Use straight quotes, commas and full stops instead.
+- Do not use this vocabulary: delve, leverage, robust, seamless, crucial, pivotal, comprehensive, cutting-edge, game-changer, foster, landscape, journey, realm, testament to, in order to, in today's fast-paced world, "let that sink in", "in conclusion", "It's not just X, it's Y", "Not only X but also Y".
+- Vary sentence length hard: short lines, then a long one. Never a uniform rhythm of three ("big, bold, and better").
+- No hashtag walls (3 hashtags max). No reflex engagement bait ("Agree?", "Thoughts?").
+- NEVER invent numbers, metrics, clients or outcomes the thread does not contain. If a number is missing, write {{your number}}.
+
+Structure:
+1. LINE 1 — exactly one hook from the library above, filled with a SPECIFIC from the thread (a real number, quote, or detail). It must survive truncation at 140 characters.
+2. LINE 2 pays off line 1. Never waste it on setup.
+3. Body — the real insight or value from the thread, 200–500 words, staircase or short-paragraph rhythm, concrete specifics throughout.
+4. End with ONE question only you could ask about the specifics above (never "Thoughts?").
+5. If the Reddit post has images, videos or media, end with "Attach this visual: [image URL]".
+
+Here is the full Reddit thread JSON:`
+  },
   {
     id: 'default',
     name: 'LinkedIn Viral Staircase',
@@ -327,6 +356,69 @@ async function generateAIPost(providerId, apiKey, modelId, systemPrompt, redditJ
 }
 
 // ============================================================================
+// LINKEDIN SKILL ENGINE — hook formulas + humanizer + 5-check panel
+// (ported from MIT-licensed linkedin-agent-skill; data in skills/)
+// ============================================================================
+
+/**
+ * Compose the final system prompt: inject the 21 hook formulas where a
+ * template declares them, and append the stored voice profile to every prompt.
+ */
+function buildSystemPrompt(promptObj, settings) {
+  let prompt = promptObj?.prompt || DEFAULT_SYSTEM_PROMPT;
+  if (prompt.includes('{{HOOK_FORMULAS}}')) {
+    let hookBlock = null;
+    try {
+      hookBlock = ReddJSONHumanizer.buildHookBlock();
+    } catch (e) {
+      console.warn('[ReddJSON] Hook library unavailable:', e);
+    }
+    prompt = prompt.replace('{{HOOK_FORMULAS}}',
+      hookBlock || 'No hook library available: still open with a specific, scroll-stopping first line.');
+  }
+  const voice = (settings?.voiceProfile || '').trim();
+  if (voice) {
+    prompt += '\n\n=== AUTHOR VOICE ===\n' +
+      'Write AS the person described below. Their word choices, sentence rhythm and positions ' +
+      'override every generic style instruction above whenever they conflict. Never fabricate ' +
+      'numbers: use what they provided verbatim, or write {{your number}}.\n' + voice;
+  }
+  return prompt;
+}
+
+/**
+ * humanize() + detect() on an AI draft. Never throws: on failure the raw draft
+ * passes through and the UI just gets no score.
+ * @returns {{ text: string, humanData: Object|null }}
+ */
+async function humanizeDraft(draftText) {
+  try {
+    await ReddJSONHumanizer.init();
+    const { text, report } = ReddJSONHumanizer.humanize(draftText);
+    const panel = ReddJSONHumanizer.detect(text);
+    return {
+      text,
+      humanData: {
+        humanized: true,
+        humanScore: panel.overall,
+        verdict: panel.verdict,          // PASS >= 70 & min >= 55 · REVIEW >= 50 · else FLAGGED
+        weakest: panel.weakest,
+        humanReport: {
+          invisible: report.invisible,
+          typographic: report.typographic,
+          lexical: report.lexical,
+          structures: report.structures, // flagged for manual rewrite, never auto-fixed
+          checks: panel.checks
+        }
+      }
+    };
+  } catch (error) {
+    console.warn('[ReddJSON] Humanizer skipped:', error.message || error);
+    return { text: draftText, humanData: null };
+  }
+}
+
+// ============================================================================
 // MEDIA EXTRACTION FROM REDDIT JSON
 // ============================================================================
 
@@ -489,7 +581,12 @@ async function addAIPost(postEntry) {
       provider: postEntry.provider || 'unknown',
       media: postEntry.media || [],
       timestamp: Date.now(),
-      usage: postEntry.usage || {}
+      usage: postEntry.usage || {},
+      humanized: postEntry.humanized || false,
+      humanScore: postEntry.humanScore ?? null,
+      verdict: postEntry.verdict || null,
+      weakest: postEntry.weakest || null,
+      humanReport: postEntry.humanReport || null
     };
 
     posts.unshift(entry);
@@ -544,7 +641,9 @@ async function getSettings() {
       defaultProvider: '',
       defaultModel: '',
       systemPrompts: PROMPT_TEMPLATES,
-      activePromptId: 'default'
+      activePromptId: 'hook-engine',
+      autoHumanize: true,
+      voiceProfile: ''
     };
 
     const settings = { ...defaults, ...result.reddjson_settings };
@@ -630,7 +729,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         const promptObj = settings.systemPrompts?.find(p => p.id === promptId);
-        const systemPrompt = promptObj?.prompt || DEFAULT_SYSTEM_PROMPT;
+        try { await ReddJSONHumanizer.init(); } catch (e) { console.warn('[ReddJSON] Skill data not loaded:', e); }
+        const systemPrompt = buildSystemPrompt(promptObj, settings);
 
         // Fetch Reddit JSON first
         const jsonResult = await fetchRedditJSON(message.permalink);
@@ -645,22 +745,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
         if (!aiResult.success) return aiResult;
 
+        // Strip the AI fingerprint and score the draft before the user sees it
+        const hr = settings.autoHumanize === false
+          ? { text: aiResult.text, humanData: null }
+          : await humanizeDraft(aiResult.text);
+
         // Save to AI posts history
         const saveResult = await addAIPost({
           permalink: message.permalink,
           redditTitle: message.title || 'Untitled',
           subreddit: message.subreddit || 'unknown',
           postId: message.postId || 'unknown',
-          generatedText: aiResult.text,
+          generatedText: hr.text,
           model: aiResult.model,
           provider: providerId,
           media,
-          usage: aiResult.usage
+          usage: aiResult.usage,
+          ...(hr.humanData ? hr.humanData : {})
         });
 
         return {
           success: true,
-          text: aiResult.text,
+          text: hr.text,
+          humanScore: hr.humanData?.humanScore ?? null,
+          verdict: hr.humanData?.verdict ?? null,
           media,
           entry: saveResult.entry,
           usage: aiResult.usage,
@@ -716,7 +824,9 @@ chrome.runtime.onInstalled.addListener((details) => {
         defaultProvider: '',
         defaultModel: '',
         systemPrompts: PROMPT_TEMPLATES,
-        activePromptId: 'default'
+        activePromptId: 'hook-engine',
+        autoHumanize: true,
+        voiceProfile: ''
       }
     });
   } else if (details.reason === 'update') {
@@ -776,7 +886,8 @@ chrome.commands.onCommand.addListener(async (command) => {
     }
 
     const promptObj = settings.systemPrompts?.find(p => p.id === settings.activePromptId);
-    const systemPrompt = promptObj?.prompt || DEFAULT_SYSTEM_PROMPT;
+    try { await ReddJSONHumanizer.init(); } catch (e) { console.warn('[ReddJSON] Skill data not loaded:', e); }
+    const systemPrompt = buildSystemPrompt(promptObj, settings);
     const media = extractMediaFromRedditJson(jsonResult.data);
 
     const aiResult = await generateAIPost(
@@ -788,19 +899,30 @@ chrome.commands.onCommand.addListener(async (command) => {
       return;
     }
 
+    const hr = settings.autoHumanize === false
+      ? { text: aiResult.text, humanData: null }
+      : await humanizeDraft(aiResult.text);
+
     const title = jsonResult.data?.[0]?.data?.children?.[0]?.data?.title || 'Untitled';
     const subreddit = jsonResult.data?.[0]?.data?.children?.[0]?.data?.subreddit || 'unknown';
     const postId = jsonResult.data?.[0]?.data?.children?.[0]?.data?.id || 'unknown';
 
     await addAIPost({
       permalink, redditTitle: title, subreddit, postId,
-      generatedText: aiResult.text, model: aiResult.model,
-      provider: settings.defaultProvider, media, usage: aiResult.usage
+      generatedText: hr.text, model: aiResult.model,
+      provider: settings.defaultProvider, media, usage: aiResult.usage,
+      ...(hr.humanData ? hr.humanData : {})
     });
 
-    chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: 'LinkedIn post ready! Check sidebar', type: 'success' });
+    chrome.tabs.sendMessage(tab.id, {
+      action: 'showToast',
+      message: hr.humanData
+        ? `LinkedIn post ready — ${hr.humanData.humanScore} ${hr.humanData.verdict}! Check sidebar`
+        : 'LinkedIn post ready! Check sidebar',
+      type: 'success'
+    });
     try { await chrome.sidePanel.open({ tabId: tab.id }); } catch {}
   }
 });
 
-console.log('[ReddJSON] Background service worker v2.1 loaded');
+console.log('[ReddJSON] Background service worker v2.2 loaded');
